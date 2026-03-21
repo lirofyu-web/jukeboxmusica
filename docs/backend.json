@@ -1,0 +1,43 @@
+
+{
+  "entities": {
+    "Album": {
+      "title": "Album",
+      "description": "A music album in the jukebox collection.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "artist": { "type": "string" },
+        "coverUrl": { "type": "string" },
+        "order": { "type": "number" },
+        "tracks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/backend/entities/Track"
+          }
+        }
+      },
+      "required": ["title", "artist", "coverUrl"]
+    },
+    "Track": {
+      "title": "Track",
+      "description": "A single music track.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "duration": { "type": "string" }
+      },
+      "required": ["id", "title", "duration"]
+    }
+  },
+  "auth": {
+    "providers": ["google.com"]
+  },
+  "firestore": {
+    "/albums/{albumId}": {
+      "schema": "Album",
+      "description": "Collection of albums available in the jukebox."
+    }
+  }
+}

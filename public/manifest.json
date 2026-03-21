@@ -1,0 +1,25 @@
+
+{
+  "name": "JUKEBOX MONTANHA",
+  "short_name": "Jukebox",
+  "description": "Experiência retro de jukebox totalmente offline.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#111111",
+  "theme_color": "#f97316",
+  "orientation": "landscape",
+  "icons": [
+    {
+      "src": "https://picsum.photos/seed/jukebox-192/192/192",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "https://picsum.photos/seed/jukebox-512/512/512",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

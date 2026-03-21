@@ -1,0 +1,53 @@
+
+{
+  "placeholderImages": [
+    {
+      "id": "daft-punk",
+      "description": "Daft Punk Random Access Memories",
+      "imageUrl": "https://picsum.photos/seed/daft-punk/800/800",
+      "imageHint": "daft punk"
+    },
+    {
+      "id": "pink-floyd",
+      "description": "Pink Floyd Dark Side Moon",
+      "imageUrl": "https://picsum.photos/seed/pink-floyd/800/800",
+      "imageHint": "pink floyd"
+    },
+    {
+      "id": "michael-jackson",
+      "description": "Michael Jackson Thriller",
+      "imageUrl": "https://picsum.photos/seed/mj-thriller/800/800",
+      "imageHint": "michael jackson"
+    },
+    {
+      "id": "nirvana",
+      "description": "Nirvana Nevermind",
+      "imageUrl": "https://picsum.photos/seed/nirvana-nevermind/800/800",
+      "imageHint": "nirvana"
+    },
+    {
+      "id": "miles-davis",
+      "description": "Miles Davis Kind of Blue",
+      "imageUrl": "https://picsum.photos/seed/miles-davis/800/800",
+      "imageHint": "miles davis"
+    },
+    {
+      "id": "radiohead",
+      "description": "Radiohead OK Computer",
+      "imageUrl": "https://picsum.photos/seed/radiohead-ok/800/800",
+      "imageHint": "radiohead"
+    },
+    {
+      "id": "fleetwood-mac",
+      "description": "Fleetwood Mac Rumours",
+      "imageUrl": "https://picsum.photos/seed/fleetwood-mac/800/800",
+      "imageHint": "fleetwood mac"
+    },
+    {
+      "id": "amy-winehouse",
+      "description": "Amy Winehouse Back to Black",
+      "imageUrl": "https://picsum.photos/seed/amy-winehouse/800/800",
+      "imageHint": "amy winehouse"
+    }
+  ]
+}
