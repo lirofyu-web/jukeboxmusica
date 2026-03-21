@@ -109,24 +109,29 @@ export default function MachineAdminPage({ params }: { params: Promise<{ machine
       let folderCoverUrl = '';
       if (group.image) {
         try {
-          const imgFormData = new FormData();
-          imgFormData.append("file", group.image);
-          const imgRes = await fetch("/api/proxy-upload", { method: "POST", body: imgFormData });
-          if (imgRes.ok) {
-            const imgData = await imgRes.json();
-            folderCoverUrl = imgData.url;
-          }
+          const storage = getStorage();
+          const imgRef = ref(storage, `machines/${machineId}/uploads/${folderName}/cover_${group.image.name}`);
+          await uploadBytesResumable(imgRef, group.image);
+          folderCoverUrl = await getDownloadURL(imgRef);
         } catch (e) { console.error("Falha ao subir capa da pasta", e); }
       }
 
       for (const file of group.audio) {
         setCurrentFileName(`${folderName}/${file.name}`);
         try {
-          const formData = new FormData();
-          formData.append("file", file);
-          const response = await fetch("/api/proxy-upload", { method: "POST", body: formData });
-          if (!response.ok) throw new Error("Falha no upload");
-          const data = await response.json();
+          const storage = getStorage();
+          const storageRef = ref(storage, `machines/${machineId}/uploads/${folderName}/${file.name}`);
+          
+          await new Promise<void>((resolve, reject) => {
+            const uploadTask = uploadBytesResumable(storageRef, file);
+            uploadTask.on('state_changed', 
+              null, // let the overall progress handle it
+              (error) => reject(error),
+              () => resolve()
+            );
+          });
+          
+          const downloadUrl = await getDownloadURL(storageRef);
           
           await addDoc(collection(firestore, `machines/${machineId}/music_commands`), {
             title: file.name.replace(/\.[^/.]+$/, ""),
@@ -153,16 +158,24 @@ export default function MachineAdminPage({ params }: { params: Promise<{ machine
     for (const file of looseFiles) {
       setCurrentFileName(file.name);
       try {
-        const formData = new FormData();
-        formData.append("file", file);
-        const response = await fetch("/api/proxy-upload", { method: "POST", body: formData });
-        if (!response.ok) throw new Error("Falha no upload");
-        const data = await response.json();
+        const storage = getStorage();
+        const storageRef = ref(storage, `machines/${machineId}/uploads/loose_files/${file.name}`);
+        
+        await new Promise<void>((resolve, reject) => {
+          const uploadTask = uploadBytesResumable(storageRef, file);
+          uploadTask.on('state_changed', 
+            null, 
+            (error) => reject(error),
+            () => resolve()
+          );
+        });
+        
+        const downloadUrl = await getDownloadURL(storageRef);
         
         await addDoc(collection(firestore, `machines/${machineId}/music_commands`), {
           title: file.name.replace(/\.[^/.]+$/, ""),
           artist: 'Avulsa',
-          url: data.url,
+          url: downloadUrl,
           command: 'DOWNLOAD_TRACK',
           status: 'pending',
           createdAt: serverTimestamp(),
