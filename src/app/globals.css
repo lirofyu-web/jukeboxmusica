@@ -118,3 +118,30 @@ canvas, video, img {
 button, [role="button"], input {
   pointer-events: auto;
 }
+
+/* 🚀 PATCH DE ALTA PERFORMANCE PARA ANDROID TV 🚀 */
+/* Remove efeitos que exigem muito processamento gráfico (GPU) em TV Boxes simples */
+
+.android-tv-mode * {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+.android-tv-mode .glass-morphism {
+  background-color: rgb(9 9 11 / 0.95); /* Cor sólida quase opaca substitui o blur */
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.android-tv-mode .jukebox-glow, 
+.android-tv-mode .gold-glow,
+.android-tv-mode .album-selected {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5) !important; /* Sombras simples e curtas */
+}
+
+.android-tv-mode .animate-pulse-gold {
+  animation: none !important; /* Para pulsação de luz */
+}
+
+.android-tv-mode .vinyl-spin {
+  animation-duration: 5s !important; /* Reduz velocidade da animação para economizar fôlego */
+}

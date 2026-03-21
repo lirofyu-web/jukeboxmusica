@@ -47,6 +47,18 @@ export default function RootLayout({
                   });
                 });
               }
+              
+              // Patch de Performance para Android TV / Capacitor
+              (function() {
+                var ua = navigator.userAgent.toLowerCase();
+                var isAndroid = ua.indexOf("android") > -1;
+                var isCapacitor = !!window.Capacitor;
+                
+                if (isAndroid || isCapacitor) {
+                  document.documentElement.classList.add('android-tv-mode');
+                  console.log('Modo de Alta Performance Ativado para Android TV');
+                }
+              })();
             `,
           }}
         />
