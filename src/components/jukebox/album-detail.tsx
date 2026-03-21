@@ -13,9 +13,11 @@ interface AlbumDetailProps {
   onBack: () => void;
   onSelectTrack: (track: Track) => void;
   currentTrackId?: string;
+  showPaymentModal: boolean;
+  showAdmin: boolean;
 }
 
-export const AlbumDetail: React.FC<AlbumDetailProps> = ({ album, onBack, onSelectTrack, currentTrackId }) => {
+export const AlbumDetail: React.FC<AlbumDetailProps> = ({ album, onBack, onSelectTrack, currentTrackId, showPaymentModal, showAdmin }) => {
   const [focusedIndex, setFocusedIndex] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -30,6 +32,7 @@ export const AlbumDetail: React.FC<AlbumDetailProps> = ({ album, onBack, onSelec
   }, [focusedIndex]);
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (showPaymentModal || showAdmin) return;
     switch (e.key) {
       case 'ArrowUp': 
         e.preventDefault(); 
@@ -49,7 +52,7 @@ export const AlbumDetail: React.FC<AlbumDetailProps> = ({ album, onBack, onSelec
         onBack(); 
         break;
     }
-  }, [focusedIndex, album.tracks, onBack, onSelectTrack]);
+  }, [focusedIndex, album.tracks, onBack, onSelectTrack, showPaymentModal, showAdmin]);
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown);

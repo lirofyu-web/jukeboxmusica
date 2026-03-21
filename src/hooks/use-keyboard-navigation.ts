@@ -18,6 +18,7 @@ interface KeyboardNavigationProps {
   onAlphabetSelect: () => void;
   onEscVideoMode: () => void;
   onPaymentToggle: () => void;
+  showPaymentModal: boolean;
 }
 
 
@@ -36,7 +37,8 @@ export const useKeyboardNavigation = ({
   onAlphabetNavigate,
   onAlphabetSelect,
   onEscVideoMode,
-  onPaymentToggle
+  onPaymentToggle,
+  showPaymentModal
 }: KeyboardNavigationProps) => {
 
 
@@ -80,7 +82,7 @@ export const useKeyboardNavigation = ({
       return;
     }
 
-    if (showAdmin) return;
+    if (showAdmin || showPaymentModal) return;
 
     // Detalhe do Álbum
     if (selectedAlbumId) {
@@ -119,7 +121,7 @@ export const useKeyboardNavigation = ({
   }, [
     onVolumeChange, onAdminToggle, onAddCredit, onNavigate, onBack, onSelect,
     isVideoMode, showAdmin, selectedAlbumId, showAlphabetBar, onToggleAlphabetBar,
-    onAlphabetNavigate, onAlphabetSelect, onEscVideoMode, onPaymentToggle
+    onAlphabetNavigate, onAlphabetSelect, onEscVideoMode, onPaymentToggle, showPaymentModal
   ]);
 
 

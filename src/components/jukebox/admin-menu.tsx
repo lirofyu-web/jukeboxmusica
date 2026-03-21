@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Album, Track, GENRES } from '@/lib/jukebox-data';
-import { X, HardDrive, DollarSign, Ban, Settings2, Trash2, RefreshCw, Video, FolderTree, CreditCard } from 'lucide-react';
+import { X, HardDrive, DollarSign, Ban, Settings2, Trash2, RefreshCw, Video, FolderTree, CreditCard, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -15,6 +15,7 @@ import { doc, onSnapshot } from 'firebase/firestore';
 
 interface AdminMenuProps {
   onClose: () => void;
+  onLogout: () => void;
   onAddAlbumsBulk: (albums: Album[]) => void;
   onDeleteAlbum: (id: string) => void;
   albums: Album[];
@@ -30,13 +31,13 @@ interface AdminMenuProps {
   mpAccessToken: string;
   setMpAccessToken: (token: string) => void;
   machineId: string;
-  setMachineId: (id: string) => void;
 }
 
 type FocusableId = 'close-btn' | 'sync-btn' | 'sync-direct-btn' | 'price-input' | 'mp-token-input' | 'machine-id-input' | 'clear-lib' | 'clear-viz' | string;
 
 export const AdminMenu: React.FC<AdminMenuProps> = ({ 
   onClose, 
+  onLogout,
   onAddAlbumsBulk,
   onDeleteAlbum,
   albums,
@@ -51,8 +52,7 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
   onVisualizersUpdated,
   mpAccessToken,
   setMpAccessToken,
-  machineId,
-  setMachineId
+  machineId
 }) => {
   const firestore = useFirestore();
   const [machineName, setMachineName] = useState<string | null>(null);
@@ -77,10 +77,7 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
     ...GENRES.map(g => `genre-select-${g}`),
     'sync-btn',
     'sync-direct-btn',
-    'price-input',
-    'mp-token-input',
-    'machine-id-input',
-    'mp-save-btn',
+    'logout-btn',
     'clear-lib',
     'clear-viz',
     ...GENRES.map(g => `genre-toggle-${g}`),
@@ -104,8 +101,8 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
           fileInputRef.current?.click();
         } else if (focusedId === 'sync-direct-btn') {
           handleSyncDirectAccess();
-        } else if (focusedId === 'mp-save-btn') {
-          handleSaveConfig();
+        } else if (focusedId === 'logout-btn') {
+          onLogout();
         }
         break;
       case 'Escape':
@@ -581,21 +578,15 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
                 </h3>
                 <div className="space-y-5">
                   <div>
-                    <label className="text-[9px] font-black uppercase tracking-[0.3em] text-zinc-500 block mb-3">Valor por Música</label>
-                    <div className="relative">
+                    <div className="flex items-center justify-between mb-3">
+                      <label className="text-[9px] font-black uppercase tracking-[0.3em] text-zinc-500">Valor por Música</label>
+                      <span className="text-[8px] font-black uppercase text-primary/40 bg-primary/5 px-2 py-1 border border-primary/10 rounded-sm">Bloqueado (Painel ADM)</span>
+                    </div>
+                    <div className="relative group">
                       <span className="absolute left-4 top-1/2 -translate-y-1/2 text-primary/40 font-black text-lg">R$</span>
-                      <Input 
-                        id="price-input"
-                        type="number" 
-                        step="0.10" 
-                        value={pricePerSong} 
-                        onChange={(e) => setPricePerSong(Number(e.target.value))} 
-                        onFocus={() => setFocusedId('price-input')}
-                        className={cn(
-                          "bg-black/60 border-white/5 text-primary text-3xl font-black font-mono h-16 pl-12 text-center transition-all rounded-sm cursor-text",
-                          focusedId === 'price-input' && "border-white ring-1 ring-white"
-                        )} 
-                      />
+                      <div className="bg-black/60 border border-white/5 text-primary text-3xl font-black font-mono h-16 pl-12 flex items-center justify-center rounded-sm opacity-80">
+                        {pricePerSong.toFixed(2).replace('.', ',')}
+                      </div>
                     </div>
                   </div>
                   <div className="bg-primary/5 p-6 border border-primary/20 rounded-sm overflow-hidden relative space-y-4">
@@ -628,49 +619,46 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
                 </h3>
                 <div className="space-y-4">
                   <div>
-                    <label className="text-[9px] font-black uppercase tracking-[0.3em] text-zinc-500 block mb-2">ID Único da Máquina (PDV)</label>
-                    <Input 
-                      id="machine-id-input"
-                      value={machineId} 
-                      onChange={(e) => setMachineId(e.target.value.toUpperCase())} 
-                      onFocus={() => setFocusedId('machine-id-input')}
-                      onMouseEnter={() => setFocusedId('machine-id-input')}
-                      className={cn(
-                        "bg-black/60 border-white/5 text-white text-xs font-black h-12 px-4 transition-all rounded-sm",
-                        focusedId === 'machine-id-input' && "border-white ring-1 ring-white"
-                      )} 
-                    />
+                    <label className="text-[9px] font-black uppercase tracking-[0.3em] text-zinc-500 block mb-2">Máquina Autenticada</label>
+                    <div className="bg-black/60 border border-white/5 text-white/40 text-[10px] font-mono h-12 px-4 flex items-center rounded-sm">
+                      {machineId}
+                    </div>
                   </div>
                   <div>
-                    <label className="text-[9px] font-black uppercase tracking-[0.3em] text-zinc-500 block mb-2">Access Token</label>
-                    <Input 
-                      id="mp-token-input"
-                      type="password"
-                      placeholder="APP_USR-..." 
-                      value={mpAccessToken} 
-                      onChange={(e) => setMpAccessToken(e.target.value)} 
-                      onFocus={() => setFocusedId('mp-token-input')}
-                      onMouseEnter={() => setFocusedId('mp-token-input')}
-                      className={cn(
-                        "bg-black/60 border-white/5 text-white text-[10px] h-12 px-4 transition-all rounded-sm font-mono",
-                        focusedId === 'mp-token-input' && "border-white ring-1 ring-white"
-                      )} 
-                    />
+                    <div className="flex items-center justify-between mb-2">
+                       <label className="text-[9px] font-black uppercase tracking-[0.3em] text-zinc-500">Access Token</label>
+                       <span className="text-[8px] font-black uppercase text-primary/40">ADM Somente</span>
+                    </div>
+                    <div className="bg-black/60 border border-white/5 text-white/20 text-[10px] h-12 px-4 flex items-center rounded-sm font-mono truncate">
+                      {mpAccessToken ? "••••••••••••••••" : "Não Configurado"}
+                    </div>
                   </div>
-                  <Button
-                    id="mp-save-btn"
-                    onClick={() => {
-                        handleSaveConfig();
-                        setFocusedId('mp-save-btn');
-                    }}
-                    onMouseEnter={() => setFocusedId('mp-save-btn')}
-                    className={cn(
-                        "w-full h-12 bg-primary/20 hover:bg-primary text-primary hover:text-black text-[11px] font-black uppercase rounded-sm border border-primary/20 transition-all shadow-lg",
-                        focusedId === 'mp-save-btn' && "ring-4 ring-white scale-[1.02] bg-primary text-black"
-                    )}
-                  >
-                    Salvar Configurações
-                  </Button>
+                  
+                  <div className="p-4 bg-primary/5 border border-primary/10 rounded-sm">
+                    <p className="text-[9px] text-primary/60 font-black uppercase leading-tight text-center">
+                      Configurações financeiras e APIs são gerenciadas remotamente através do Painel Administrativo por segurança.
+                    </p>
+                  </div>
+
+                  <div className="pt-4 border-t border-white/5">
+                    <Button
+                      id="logout-btn"
+                      variant="destructive"
+                      onClick={() => {
+                        if (confirm("Deseja realmente sair da conta nesta máquina?")) {
+                          onLogout();
+                        }
+                      }}
+                      onMouseEnter={() => setFocusedId('logout-btn')}
+                      className={cn(
+                          "w-full h-12 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white text-[11px] font-black uppercase rounded-sm border border-red-500/20 transition-all gap-2",
+                          focusedId === 'logout-btn' && "ring-4 ring-white scale-[1.02] bg-red-500 text-white"
+                      )}
+                    >
+                      <LogOut className="h-4 w-4" />
+                      Sair da Conta (Logout)
+                    </Button>
+                  </div>
                 </div>
               </section>
             </div>

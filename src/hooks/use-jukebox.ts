@@ -4,7 +4,8 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Album, ALBUMS, Track, QueuedTrack, VisualizerVideo } from '@/lib/jukebox-data';
 import { getAllAlbums, getAllVisualizers, getUSBHandle, clearUSBHandle } from '@/lib/db';
 import { useFirestore } from '@/firebase/provider';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { useMachine } from '@/components/machine-provider';
+import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem } from '@capacitor/filesystem';
 
@@ -17,6 +18,7 @@ const FALLBACK_COVER = "https://picsum.photos/seed/music/800/800";
 
 export const useJukebox = () => {
   const firestore = useFirestore();
+  const { machineId } = useMachine();
   const [credits, setCredits] = useState<number>(0);
   const [message, setMessage] = useState<string>("");
   const [customAlbums, setCustomAlbums] = useState<Album[]>([]);
@@ -29,7 +31,6 @@ export const useJukebox = () => {
   const [hiddenGenres, setHiddenGenres] = useState<string[]>([]);
 
   const [mpAccessToken, setMpAccessToken] = useState<string>("");
-  const [machineId, setMachineId] = useState<string>(`jukebox-${Math.random().toString(36).substring(7)}`);
   const [machineName, setMachineName] = useState<string>("");
   const [isInitialLoadDone, setIsInitialLoadDone] = useState(false);
   const [activeVisualizerUrl, setActiveVisualizerUrl] = useState<string>("");
@@ -38,7 +39,12 @@ export const useJukebox = () => {
     if (!machineId || !firestore) return;
     const unsub = onSnapshot(doc(firestore, 'machines', machineId), (snap: any) => {
       if (snap.exists()) {
-        setMachineName(snap.data().name || "");
+        const data = snap.data();
+        setMachineName(data.name || "");
+        if (data.pricePerSong !== undefined) setPricePerSong(data.pricePerSong);
+        if (data.mpAccessToken !== undefined) setMpAccessToken(data.mpAccessToken);
+        if (data.revenueCash !== undefined) setRevenueCash(data.revenueCash);
+        if (data.revenuePix !== undefined) setRevenuePix(data.revenuePix);
       }
     });
     return () => unsub();
@@ -132,9 +138,6 @@ export const useJukebox = () => {
           const savedMPToken = localStorage.getItem('jukebox_mp_token');
           if (savedMPToken) setMpAccessToken(savedMPToken);
 
-          const savedMachineId = localStorage.getItem('jukebox_machine_id');
-          if (savedMachineId) setMachineId(savedMachineId);
-
           isInitialLoadDoneRef.current = true;
           setIsInitialLoadDone(true);
         }
@@ -165,16 +168,13 @@ export const useJukebox = () => {
 
   useEffect(() => {
     if (isInitialLoadDone) {
-      localStorage.setItem('jukebox_price', pricePerSong.toString());
-      localStorage.setItem('jukebox_revenue_cash', revenueCash.toString());
-      localStorage.setItem('jukebox_revenue_pix', revenuePix.toString());
-
+      // Configurações agora são gerenciadas via Firestore (Admin Panel)
+      // Apenas créditos e gêneros ocultos permanecem puramente locais por enquanto
       localStorage.setItem('jukebox_hidden_genres', JSON.stringify(hiddenGenres));
       localStorage.setItem('jukebox_credits', credits.toString());
-      localStorage.setItem('jukebox_mp_token', mpAccessToken);
-      localStorage.setItem('jukebox_machine_id', machineId);
+      if (machineId) localStorage.setItem('jukebox_machine_id', machineId);
     }
-  }, [pricePerSong, revenueCash, revenuePix, hiddenGenres, credits, mpAccessToken, machineId, isInitialLoadDone]);
+  }, [hiddenGenres, credits, machineId, isInitialLoadDone]);
 
 
   const addCredit = useCallback(() => {
@@ -183,25 +183,36 @@ export const useJukebox = () => {
       localStorage.setItem('jukebox_credits', newVal.toString());
       return newVal;
     });
-    setRevenueCash(prev => prev + 0.50);
+    
+    setRevenueCash(prev => {
+      const newCash = prev + 0.50;
+      if (machineId && firestore) {
+        updateDoc(doc(firestore, 'machines', machineId), { revenueCash: newCash })
+          .catch(err => console.error("Erro ao sincronizar receita (Dinheiro):", err));
+      }
+      return newCash;
+    });
 
     setMessage("CRÉDITO OK!");
     setTimeout(() => setMessage(""), 1500);
-  }, []);
+  }, [machineId, firestore]);
 
   const addPixRevenue = useCallback((amount: number) => {
-    setRevenuePix(prev => prev + amount);
-  }, []);
+    setRevenuePix(prev => {
+      const newPix = prev + amount;
+      if (machineId && firestore) {
+        updateDoc(doc(firestore, 'machines', machineId), { revenuePix: newPix })
+          .catch(err => console.error("Erro ao sincronizar receita (PIX):", err));
+      }
+      return newPix;
+    });
+  }, [machineId, firestore]);
 
 
   // Persistência imediata do MP Token e Machine ID
   useEffect(() => {
     if (mpAccessToken) localStorage.setItem('jukebox_mp_token', mpAccessToken);
   }, [mpAccessToken]);
-
-  useEffect(() => {
-    if (machineId) localStorage.setItem('jukebox_machine_id', machineId);
-  }, [machineId]);
 
   const requestUsbPermission = useCallback(async () => {
     if (!usbHandle) return false;
@@ -363,7 +374,6 @@ export const useJukebox = () => {
 
     setMpAccessToken,
     machineId,
-    setMachineId,
     machineName,
     activeMediaUrlRef,
     activeVisualizerBlobUrlRef

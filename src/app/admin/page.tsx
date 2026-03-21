@@ -8,7 +8,9 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Edit2, Check, X, Trash2 } from 'lucide-react';
+import { Edit2, Check, X, Trash2, Settings2, Save } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
 import Link from 'next/link';
 
 interface MachineData {
@@ -16,12 +18,23 @@ interface MachineData {
   name?: string;
   status?: string;
   lastPing?: { seconds: number; nanoseconds: number };
+  pricePerSong?: number;
+  mpAccessToken?: string;
+  revenueCash?: number;
+  revenuePix?: number;
 }
 
 export default function AdminPage() {
   const firestore = useFirestore();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
+  
+  // Settings Modal State
+  const [configId, setConfigId] = useState<string | null>(null);
+  const [price, setPrice] = useState(0.5);
+  const [token, setToken] = useState('');
+  const [cash, setCash] = useState(0);
+  const [pix, setPix] = useState(0);
   
   const machinesQuery = useMemo(() => {
     if (!firestore) return null;
@@ -46,30 +59,55 @@ export default function AdminPage() {
     }
   };
 
-  const handleDeleteMachine = async (id: string, name: string) => {
+  const handleOpenSettings = (m: MachineData) => {
+    setConfigId(m.id);
+    setPrice(m.pricePerSong || 0.5);
+    setToken(m.mpAccessToken || '');
+    setCash(m.revenueCash || 0);
+    setPix(m.revenuePix || 0);
+  };
+
+  const handleSaveSettings = async () => {
+    if (!firestore || !configId) return;
+    try {
+      await updateDoc(doc(firestore, 'machines', configId), {
+        pricePerSong: price,
+        mpAccessToken: token,
+        revenueCash: cash,
+        revenuePix: pix
+      });
+      setConfigId(null);
+    } catch (e) {
+      console.error(e);
+      alert("Erro ao salvar configurações");
+    }
+  };
+
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  const handleDeleteMachine = async (id: string) => {
     if (!firestore) return;
-    if (!confirm(`Tem certeza que deseja remover a máquina "${name || id}"? Isso não pode ser desfeito.`)) return;
     
     try {
       console.log(`Tentando excluir máquina: ${id}`);
       await deleteDoc(doc(firestore, 'machines', id));
-      alert("Máquina excluída com sucesso.");
+      setConfirmDeleteId(null);
     } catch (e: any) {
       console.error("Erro ao excluir máquina:", e);
-      alert(`Erro ao excluir: ${e.message || "Erro desconhecido. Verifique as permissões do Firebase."}`);
+      alert(`Erro ao excluir: ${e.message || "Erro de permissão"}`);
     }
   };
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-semibold">Connected Machines</h2>
+        <h2 className="text-2xl font-semibold">Máquinas Conectadas</h2>
       </div>
       
       {loading ? (
-        <p>Loading machines...</p>
+        <p>Carregando máquinas...</p>
       ) : machines.length === 0 ? (
-        <p className="text-zinc-500">No machines found.</p>
+        <p className="text-zinc-500">Nenhuma máquina encontrada.</p>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {machines.map((machine) => {
@@ -108,23 +146,59 @@ export default function AdminPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-sm text-zinc-300">
-                    Last Ping: {machine.lastPing ? new Date(machine.lastPing.seconds * 1000).toLocaleString() : 'Never'}
-                  </p>
-                  <div className="mt-4 flex gap-2">
+                  <div className="space-y-1">
+                    <p className="text-sm text-zinc-300">
+                      Visto em: {machine.lastPing ? new Date(machine.lastPing.seconds * 1000).toLocaleString() : 'Nunca'}
+                    </p>
+                    <p className="text-xs text-zinc-500">
+                      Preço: R$ {(machine.pricePerSong || 0).toFixed(2)} | Total: R$ {((machine.revenueCash || 0) + (machine.revenuePix || 0)).toFixed(2)}
+                    </p>
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-2 gap-2">
                     <Button variant="secondary" size="sm" className="w-full" asChild>
-                      <Link href={`/admin/${machine.id}`}>Manage Music</Link>
+                      <Link href={`/admin/${machine.id}`}>Gerenciar Músicas</Link>
                     </Button>
+                    
+                    {confirmDeleteId === machine.id ? (
+                      <div className="flex gap-1">
+                        <Button 
+                          variant="destructive" 
+                          size="sm" 
+                          className="flex-1 font-bold"
+                          onClick={(e) => { e.preventDefault(); handleDeleteMachine(machine.id); }}
+                        >
+                          Confirmar?
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="px-2"
+                          onClick={(e) => { e.preventDefault(); setConfirmDeleteId(null); }}
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="bg-zinc-950 border-zinc-800 text-zinc-500 hover:text-red-500 hover:border-red-500/50 transition-colors gap-2"
+                        onClick={(e) => { e.preventDefault(); setConfirmDeleteId(machine.id); }}
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        <span>Excluir</span>
+                      </Button>
+                    )}
+
                     <Button 
                       variant="outline" 
                       size="sm" 
-                      className="bg-zinc-950 border-zinc-800 text-zinc-500 hover:text-red-500 hover:border-red-500/50 transition-colors"
-                      onClick={() => handleDeleteMachine(machine.id, machine.name || "")}
+                      className="w-full col-span-2 border-zinc-800 hover:bg-zinc-800 transition-colors gap-2"
+                      onClick={() => handleOpenSettings(machine)}
                     >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                    <Button variant="outline" size="sm" className="w-full" disabled>
-                      Settings
+                      <Settings2 className="w-3 h-3" />
+                      Configurações
                     </Button>
                   </div>
                 </CardContent>
@@ -133,6 +207,83 @@ export default function AdminPage() {
           })}
         </div>
       )}
+
+      {/* MODAL DE CONFIGURAÇÕES */}
+      <Dialog open={!!configId} onOpenChange={() => setConfigId(null)}>
+        <DialogContent className="bg-zinc-900 border-zinc-800 text-white max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Settings2 className="w-5 h-5 text-primary" />
+              Configurar Máquina
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="price">Valor por Música (R$)</Label>
+              <Input 
+                id="price" 
+                type="number" 
+                step="0.1" 
+                value={price} 
+                onChange={e => setPrice(Number(e.target.value))} 
+                className="bg-zinc-950 border-zinc-800"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="token">Mercado Pago Access Token</Label>
+              <Input 
+                id="token" 
+                type="password" 
+                value={token} 
+                onChange={e => setToken(e.target.value)} 
+                placeholder="APP_USR-..."
+                className="bg-zinc-950 border-zinc-800 font-mono text-xs"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="cash">Arrecadação Dinheiro (R$)</Label>
+                <Input 
+                  id="cash" 
+                  type="number" 
+                  step="0.1" 
+                  value={cash} 
+                  onChange={e => setCash(Number(e.target.value))} 
+                  className="bg-zinc-950 border-zinc-800"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="pix">Arrecadação PIX (R$)</Label>
+                <Input 
+                  id="pix" 
+                  type="number" 
+                  step="0.1" 
+                  value={pix} 
+                  onChange={e => setPix(Number(e.target.value))} 
+                  className="bg-zinc-950 border-zinc-800"
+                />
+              </div>
+            </div>
+            
+            <p className="text-[10px] text-zinc-500 uppercase font-black tracking-widest pt-2">
+              ID: {configId}
+            </p>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfigId(null)} className="border-zinc-800">
+              Cancelar
+            </Button>
+            <Button onClick={handleSaveSettings} className="bg-primary text-black hover:bg-orange-600 font-bold gap-2">
+              <Save className="w-4 h-4" />
+              Salvar Alterações
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

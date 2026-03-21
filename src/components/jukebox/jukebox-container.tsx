@@ -12,6 +12,7 @@ import { ListMusic, Video as VideoIcon, Search, RefreshCw, FolderSync, Smartphon
 import { cn } from '@/lib/utils';
 import { useJukebox } from '@/hooks/use-jukebox';
 import { useKeyboardNavigation } from '@/hooks/use-keyboard-navigation';
+import { useAuth } from '@/firebase/provider';
 import { saveAlbumsBulk, deleteAlbumFromDB } from '@/lib/db';
 import { Button } from '@/components/ui/button';
 
@@ -21,6 +22,7 @@ const COLUMNS = 4;
 
 export const JukeboxContainer: React.FC = () => {
   const jukebox = useJukebox();
+  const auth = useAuth();
   
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [selectedAlbumId, setSelectedAlbumId] = useState<string | null>(null);
@@ -30,6 +32,13 @@ export const JukeboxContainer: React.FC = () => {
   const [isVideoMode, setIsVideoMode] = useState(false);
   const [volume, setVolume] = useState(1.0);
   const [lastActivity, setLastActivity] = useState<number>(0);
+
+  const handleLogout = useCallback(async () => {
+    if (auth) {
+      await auth.signOut();
+      setShowAdmin(false);
+    }
+  }, [auth]);
   
   // Alphabet Search States
   const [showAlphabetBar, setShowAlphabetBar] = useState(false);
@@ -224,11 +233,11 @@ export const JukeboxContainer: React.FC = () => {
     },
     onPaymentToggle: () => {
       if (!showAdmin) setShowPaymentModal(p => !p);
-    }
-
+    },
+    showPaymentModal
   });
 
-  if (!isMounted) return <div className="h-full w-full bg-black" />;
+  if (!isMounted || !jukebox.machineId) return <div className="h-full w-full bg-black" />;
 
   return (
     <JukeboxFrame 
@@ -298,7 +307,14 @@ export const JukeboxContainer: React.FC = () => {
         {/* Main Interface Content */}
         <div className={cn("relative h-full w-full z-20 transition-opacity duration-500", isVideoMode ? "opacity-0 pointer-events-none" : "opacity-100")} suppressHydrationWarning>
           {selectedAlbum ? (
-            <AlbumDetail album={selectedAlbum} onBack={() => setSelectedAlbumId(null)} onSelectTrack={(track) => jukebox.addToQueue(track, selectedAlbum)} currentTrackId={jukebox.currentTrack?.id} />
+            <AlbumDetail 
+              album={selectedAlbum} 
+              onBack={() => setSelectedAlbumId(null)} 
+              onSelectTrack={(track) => jukebox.addToQueue(track, selectedAlbum)} 
+              currentTrackId={jukebox.currentTrack?.id} 
+              showPaymentModal={showPaymentModal}
+              showAdmin={showAdmin}
+            />
           ) : (
             <div 
               ref={scrollContainerRef}
@@ -383,7 +399,7 @@ export const JukeboxContainer: React.FC = () => {
           mpAccessToken={jukebox.mpAccessToken}
           setMpAccessToken={jukebox.setMpAccessToken}
           machineId={jukebox.machineId}
-          setMachineId={jukebox.setMachineId}
+          onLogout={handleLogout}
         />
       )}
 
