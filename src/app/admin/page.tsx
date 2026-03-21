@@ -51,10 +51,12 @@ export default function AdminPage() {
     if (!confirm(`Tem certeza que deseja remover a máquina "${name || id}"? Isso não pode ser desfeito.`)) return;
     
     try {
+      console.log(`Tentando excluir máquina: ${id}`);
       await deleteDoc(doc(firestore, 'machines', id));
-    } catch (e) {
-      console.error(e);
-      alert("Erro ao excluir máquina.");
+      alert("Máquina excluída com sucesso.");
+    } catch (e: any) {
+      console.error("Erro ao excluir máquina:", e);
+      alert(`Erro ao excluir: ${e.message || "Erro desconhecido. Verifique as permissões do Firebase."}`);
     }
   };
 
