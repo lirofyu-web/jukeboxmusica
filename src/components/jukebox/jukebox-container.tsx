@@ -43,9 +43,21 @@ export const JukeboxContainer: React.FC = () => {
 
   // Filtered Albums & Current Selection
   const allFilteredAlbums = React.useMemo(() => {
-    return [...jukebox.customAlbums, ...ALBUMS]
+    let combined = [...jukebox.customAlbums, ...ALBUMS]
       .filter(album => !jukebox.hiddenGenres.includes(album.genre))
       .filter(album => !letterFilter || album.title.toUpperCase().startsWith(letterFilter));
+
+    combined.sort((a, b) => {
+      const aIsRelease = a.title.toUpperCase().startsWith('LANÇAMENTO') || a.genre === 'Novidades';
+      const bIsRelease = b.title.toUpperCase().startsWith('LANÇAMENTO') || b.genre === 'Novidades';
+      
+      if (aIsRelease && !bIsRelease) return -1;
+      if (!aIsRelease && bIsRelease) return 1;
+      
+      return a.title.localeCompare(b.title);
+    });
+
+    return combined;
   }, [jukebox.customAlbums, jukebox.hiddenGenres, letterFilter]);
 
   const selectedAlbum = React.useMemo(() => {
@@ -64,7 +76,7 @@ export const JukeboxContainer: React.FC = () => {
     const selectedEl = document.getElementById(`album-card-${selectedIndex}`);
     if (selectedEl && scrollContainerRef.current) {
       selectedEl.scrollIntoView({
-        behavior: 'smooth',
+        behavior: 'auto',
         block: 'center',
         inline: 'center'
       });
@@ -219,7 +231,12 @@ export const JukeboxContainer: React.FC = () => {
   if (!isMounted) return <div className="h-full w-full bg-black" />;
 
   return (
-    <JukeboxFrame credits={jukebox.credits} statusMessage={jukebox.message} currentTrack={jukebox.currentTrack}>
+    <JukeboxFrame 
+      credits={jukebox.credits} 
+      statusMessage={jukebox.message} 
+      currentTrack={jukebox.currentTrack}
+      machineName={jukebox.machineName}
+    >
       <div className="h-full w-full relative bg-black overflow-hidden" suppressHydrationWarning>
         
 

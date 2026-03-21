@@ -10,6 +10,8 @@ import { saveVisualizers, clearVisualizers, saveUSBHandle } from '@/lib/db';
 import { cn } from '@/lib/utils';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
+import { useFirestore } from '@/firebase/provider';
+import { doc, onSnapshot } from 'firebase/firestore';
 
 interface AdminMenuProps {
   onClose: () => void;
@@ -52,11 +54,23 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
   machineId,
   setMachineId
 }) => {
+  const firestore = useFirestore();
+  const [machineName, setMachineName] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [status, setStatus] = useState<string>("");
   const [selectedGenre, setSelectedGenre] = useState(GENRES[0]);
   const [focusedId, setFocusedId] = useState<FocusableId>('sync-btn');
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!firestore || !machineId) return;
+    const unsub = onSnapshot(doc(firestore, 'machines', machineId), (docSnap) => {
+      if (docSnap.exists()) {
+        setMachineName(docSnap.data().name || null);
+      }
+    });
+    return () => unsub();
+  }, [firestore, machineId]);
 
   const focusableSequence: FocusableId[] = [
     'close-btn',
@@ -485,8 +499,12 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
             <Settings2 className="h-8 w-8 text-primary animate-pulse" />
           </div>
           <div>
-            <h2 className="text-5xl font-black text-white uppercase tracking-tighter leading-none mb-1">Painel do Operador</h2>
-            <p className="text-primary/40 font-black uppercase text-[10px] tracking-[0.5em]">Gerenciamento de Sistema & Configurações</p>
+            <h2 className="text-5xl font-black text-white uppercase tracking-tighter leading-none mb-1">
+              {machineName || 'Painel do Operador'}
+            </h2>
+            <p className="text-primary/40 font-black uppercase text-[10px] tracking-[0.5em]">
+              {machineName ? `Painel Local - ID: ${machineId.slice(0, 8)}` : 'Gerenciamento de Sistema & Configurações'}
+            </p>
           </div>
         </div>
 

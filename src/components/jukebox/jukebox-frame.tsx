@@ -10,9 +10,10 @@ interface JukeboxFrameProps {
   credits: number;
   statusMessage?: string;
   currentTrack?: QueuedTrack | null;
+  machineName?: string;
 }
 
-export const JukeboxFrame: React.FC<JukeboxFrameProps> = ({ children, credits, statusMessage, currentTrack }) => {
+export const JukeboxFrame: React.FC<JukeboxFrameProps> = ({ children, credits, statusMessage, currentTrack, machineName }) => {
   const [isOnline, setIsOnline] = React.useState(true);
 
   React.useEffect(() => {
@@ -66,7 +67,7 @@ export const JukeboxFrame: React.FC<JukeboxFrameProps> = ({ children, credits, s
           <div className="relative group">
             <div className="absolute -inset-1 bg-gradient-to-r from-primary to-orange-600 rounded-full blur opacity-25 group-hover:opacity-50 transition duration-1000 group-hover:duration-200"></div>
             <div className="relative bg-zinc-900 px-4 py-1.5 rounded-full border border-white/5">
-              <p className="gold-gradient-text text-[10px] font-black uppercase tracking-[0.5em]">JUKEBOX MONTANHA</p>
+              <p className="gold-gradient-text text-[10px] font-black uppercase tracking-[0.5em]">{machineName || "JUKEBOX"}</p>
             </div>
           </div>
         </div>

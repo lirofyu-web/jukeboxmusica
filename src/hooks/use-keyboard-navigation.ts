@@ -52,7 +52,7 @@ export const useKeyboardNavigation = ({
 
     // Modo Vídeo / Descanso
     if (isVideoMode) {
-      if (['escape', 'backspace', 'arrowleft', 'arrowright', 'arrowup', 'arrowdown'].includes(key)) {
+      if (['enter', 'escape', 'backspace', 'arrowleft', 'arrowright', 'arrowup', 'arrowdown'].includes(key)) {
         onEscVideoMode();
         return;
       }

@@ -10,7 +10,12 @@ export function initializeFirebase() {
   
   const firebaseApp = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
   const firestore = getFirestore(firebaseApp);
-  const auth = getAuth(firebaseApp);
+  let auth = null;
+  try {
+    auth = getAuth(firebaseApp);
+  } catch (err) {
+    console.warn("Firebase Auth bypassed (missing API Key)");
+  }
   return { firebaseApp, firestore, auth };
 }
 

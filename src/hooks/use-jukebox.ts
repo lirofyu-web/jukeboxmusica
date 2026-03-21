@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Album, ALBUMS, Track, QueuedTrack, VisualizerVideo } from '@/lib/jukebox-data';
 import { getAllAlbums, getAllVisualizers, getUSBHandle, clearUSBHandle } from '@/lib/db';
+import { useFirestore } from '@/firebase/provider';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem } from '@capacitor/filesystem';
 
@@ -14,6 +16,7 @@ const DEFAULT_VISUALIZERS = [
 const FALLBACK_COVER = "https://picsum.photos/seed/music/800/800";
 
 export const useJukebox = () => {
+  const firestore = useFirestore();
   const [credits, setCredits] = useState<number>(0);
   const [message, setMessage] = useState<string>("");
   const [customAlbums, setCustomAlbums] = useState<Album[]>([]);
@@ -27,8 +30,20 @@ export const useJukebox = () => {
 
   const [mpAccessToken, setMpAccessToken] = useState<string>("");
   const [machineId, setMachineId] = useState<string>(`jukebox-${Math.random().toString(36).substring(7)}`);
+  const [machineName, setMachineName] = useState<string>("");
   const [isInitialLoadDone, setIsInitialLoadDone] = useState(false);
   const [activeVisualizerUrl, setActiveVisualizerUrl] = useState<string>("");
+
+  useEffect(() => {
+    if (!machineId || !firestore) return;
+    const unsub = onSnapshot(doc(firestore, 'machines', machineId), (snap: any) => {
+      if (snap.exists()) {
+        setMachineName(snap.data().name || "");
+      }
+    });
+    return () => unsub();
+  }, [machineId, firestore]);
+
   const [usbHandle, setUsbHandle] = useState<FileSystemDirectoryHandle | null>(null);
   const [isUsbAuthorized, setIsUsbAuthorized] = useState(false);
 
@@ -133,6 +148,10 @@ export const useJukebox = () => {
 
   useEffect(() => {
     loadData();
+
+    const handleReload = () => loadData();
+    window.addEventListener('jukebox-reload-data', handleReload);
+    return () => window.removeEventListener('jukebox-reload-data', handleReload);
   }, [loadData]);
 
   // Limpeza apenas no unmount real do componente
@@ -276,6 +295,9 @@ export const useJukebox = () => {
   }, [credits, pricePerSong, isUsbAuthorized, usbHandle, requestUsbPermission, resolveDirectAccessFile]);
 
   const playNext = useCallback(() => {
+    // Segurança: Não pula se já tiver algo tocando
+    if (currentTrack) return null;
+    
     if (queue.length > 0) {
       const next = queue[0];
       setQueue(prev => prev.slice(1));
@@ -284,7 +306,7 @@ export const useJukebox = () => {
     }
     setCurrentTrack(null);
     return null;
-  }, [queue]);
+  }, [queue, currentTrack]);
 
   const getVisualizerUrl = useCallback(async () => {
     if (customVisualizers.length > 0) {
@@ -342,6 +364,7 @@ export const useJukebox = () => {
     setMpAccessToken,
     machineId,
     setMachineId,
+    machineName,
     activeMediaUrlRef,
     activeVisualizerBlobUrlRef
   };

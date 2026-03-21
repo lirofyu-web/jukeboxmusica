@@ -2,6 +2,7 @@
 import type {Metadata, Viewport} from 'next';
 import './globals.css';
 import { FirebaseClientProvider } from '@/firebase/client-provider';
+import { MachineProvider } from '@/components/machine-provider';
 
 export const metadata: Metadata = {
   title: 'JUKEBOX MONTANHA',
@@ -52,9 +53,11 @@ export default function RootLayout({
       </head>
       <body className="antialiased bg-background text-white overflow-hidden touch-none" suppressHydrationWarning>
         <FirebaseClientProvider>
-          <div suppressHydrationWarning className="min-h-screen">
-            {children}
-          </div>
+          <MachineProvider>
+            <div suppressHydrationWarning className="min-h-screen">
+              {children}
+            </div>
+          </MachineProvider>
         </FirebaseClientProvider>
       </body>
     </html>

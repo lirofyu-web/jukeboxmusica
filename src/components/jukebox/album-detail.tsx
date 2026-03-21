@@ -104,7 +104,7 @@ export const AlbumDetail: React.FC<AlbumDetailProps> = ({ album, onBack, onSelec
           <div ref={listRef} className="flex flex-col gap-3 pb-40">
             {album.tracks.map((track, idx) => (
               <div 
-                key={track.id} 
+                key={`${track.id}-${idx}`} 
                 className={cn(
                   "relative w-full flex items-center justify-between px-8 py-5 rounded-sm transition-all duration-300 border-l-[6px] group",
                   focusedIndex === idx 
