@@ -72,6 +72,10 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ onClose, onSuccess, 
       interval = setInterval(async () => {
         try {
           const res = await fetch(`/api/mercado-pago/check-status/${paymentId}?accessToken=${mpAccessToken}`);
+          if (!res.ok) {
+            console.warn("Falha ao verificar status do pagamento:", res.status);
+            return;
+          }
           const data = await res.json();
           if (data.status === 'approved') {
             setStep('success');
@@ -80,6 +84,10 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ onClose, onSuccess, 
               onSuccess(selectedAmount.value);
               onClose();
             }, 3000);
+          } else if (data.status === 'rejected' || data.status === 'cancelled') {
+            setError("O pagamento foi cancelado ou recusado.");
+            setStep('select');
+            clearInterval(interval);
           }
         } catch (err) {
           console.error("Erro polling status:", err);

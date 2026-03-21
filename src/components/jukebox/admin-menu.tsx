@@ -397,6 +397,34 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
 
         if (audioFiles.length === 0) continue;
 
+        // Tentar encontrar uma imagem na mesma pasta para o cover
+        const imageFiles = group.files.filter((f: any) => {
+          const n = f.name.toLowerCase();
+          return n.endsWith('.jpg') || n.endsWith('.png') || n.endsWith('.jpeg') || n.endsWith('.webp');
+        });
+
+        let bestCoverBlob: Blob | undefined = undefined;
+        if (imageFiles.length > 0) {
+          try {
+            // Prioriza arquivos que tenham 'capa', 'cover' ou 'front' no nome
+            const preferred = imageFiles.find((f: any) => {
+              const n = f.name.toLowerCase();
+              return n.includes('capa') || n.includes('cover') || n.includes('front');
+            }) || imageFiles[0];
+
+            setStatus(`Lendo capa: ${preferred.name}`);
+            const result = await Filesystem.readFile({
+              path: preferred.path,
+              directory: Directory.ExternalStorage
+            });
+            
+            const response = await fetch(`data:image/jpeg;base64,${result.data}`);
+            bestCoverBlob = await response.blob();
+          } catch (err) {
+            console.error("Erro ao carregar capa no Android:", err);
+          }
+        }
+
         const albumId = `android-${folderPath.toLowerCase().replace(/[^a-z0-9]/g, '-') || 'root'}`;
         const tracks: Track[] = audioFiles.map((item: any) => ({
           id: `track-${albumId}-${item.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
@@ -412,6 +440,7 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
           artist: group.parentName,
           genre: group.rootGenre || selectedGenre,
           coverUrl: `https://picsum.photos/seed/${encodeURIComponent(albumId)}/600/600`,
+          coverBlob: bestCoverBlob,
           isDirectAccess: true,
           tracks: tracks.sort((a, b) => a.title.localeCompare(b.title, undefined, { numeric: true }))
         });

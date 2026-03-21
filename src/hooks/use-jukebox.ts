@@ -234,7 +234,10 @@ export const useJukebox = () => {
       let fileToPlay = track.file;
 
       if (album.isDirectAccess && track.relativePath) {
-        if (!isUsbAuthorized) {
+        // No Android, a permissão é via sistema, não pelo showDirectoryPicker do navegador
+        const isAndroid = Capacitor.getPlatform() === 'android';
+        
+        if (!isUsbAuthorized && !isAndroid) {
           const ok = await requestUsbPermission();
           if (!ok) {
             setMessage("USB NÃO AUTORIZADO");
