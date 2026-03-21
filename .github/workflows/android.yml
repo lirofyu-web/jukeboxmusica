@@ -9,7 +9,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
       - run: npm install
       - run: mkdir out && echo "<html><body>Jukebox</body></html>" > out/index.html
       - uses: actions/setup-java@v4
