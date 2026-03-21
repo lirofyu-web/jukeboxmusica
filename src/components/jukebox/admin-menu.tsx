@@ -8,6 +8,8 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { saveVisualizers, clearVisualizers, saveUSBHandle } from '@/lib/db';
 import { cn } from '@/lib/utils';
+import { Capacitor } from '@capacitor/core';
+import { Filesystem, Directory } from '@capacitor/filesystem';
 
 interface AdminMenuProps {
   onClose: () => void;
@@ -230,8 +232,13 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
 
   const handleSyncDirectAccess = async () => {
     try {
+      if (Capacitor.getPlatform() === 'android') {
+        handleAndroidSync();
+        return;
+      }
+
       if (!(window as any).showDirectoryPicker) {
-        alert("Acesso Direto requer Chrome ou Edge.");
+        alert("Acesso Direto requer Chrome ou Edge. No Android, use o app nativo.");
         return;
       }
 
@@ -317,6 +324,109 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
     } catch (err) {
       console.error(err);
       setStatus("Erro USB");
+      setIsProcessing(false);
+    }
+  };
+
+  const handleAndroidSync = async () => {
+    try {
+      setIsProcessing(true);
+      setStatus("Solicitando Permissão...");
+      
+      const permission = await Filesystem.requestPermissions();
+      if (permission.publicStorage !== 'granted') {
+        setStatus("Permissão Negada");
+        setIsProcessing(false);
+        return;
+      }
+
+      setStatus("Escolha a pasta de músicas (Ex: /storage/emulated/0/Music)");
+      const pathInput = prompt("Digite o caminho da pasta no Android:", "/storage/emulated/0/Music");
+      if (!pathInput) {
+        setIsProcessing(false);
+        return;
+      }
+
+      setStatus("Sincronizando Android...");
+      const albumsToBatch: Album[] = [];
+      const allFiles: { name: string, path: string }[] = [];
+
+      async function scanDirectory(path: string) {
+        const result = await Filesystem.readdir({
+          path: path,
+          directory: Directory.ExternalStorage 
+        });
+
+        for (const file of result.files) {
+          const fullPath = `${path}/${file.name}`;
+          if (file.type === 'directory') {
+            await scanDirectory(fullPath);
+          } else {
+            allFiles.push({ name: file.name, path: fullPath });
+          }
+        }
+      }
+
+      await scanDirectory(pathInput.replace('/storage/emulated/0', ''));
+
+      const folderGroups: Record<string, any> = {};
+      
+      for (const item of allFiles) {
+        const name = item.name.toLowerCase();
+        if (name.includes('backgrounds')) continue;
+
+        const folderPath = item.path.includes('/') ? item.path.substring(0, item.path.lastIndexOf('/')) : "";
+        if (!folderGroups[folderPath]) {
+          const parts = item.path.split('/');
+          folderGroups[folderPath] = {
+            files: [],
+            albumName: parts.length > 1 ? parts[parts.length - 2] : "Raiz",
+            parentName: parts.length > 2 ? parts[parts.length - 3] : "Vários",
+            rootGenre: parts[0] || "Geral"
+          };
+        }
+        folderGroups[folderPath].files.push(item);
+      }
+
+      for (const folderPath of Object.keys(folderGroups)) {
+        const group = folderGroups[folderPath];
+        const audioFiles = group.files.filter((f: any) => {
+          const n = f.name.toLowerCase();
+          return n.endsWith('.mp3') || n.endsWith('.mp4') || n.endsWith('.webm') || n.endsWith('.mkv');
+        });
+
+        if (audioFiles.length === 0) continue;
+
+        const albumId = `android-${folderPath.toLowerCase().replace(/[^a-z0-9]/g, '-') || 'root'}`;
+        const tracks: Track[] = audioFiles.map((item: any) => ({
+          id: `track-${albumId}-${item.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+          title: item.name.replace(/\.[^/.]+$/, ""),
+          duration: "--:--",
+          relativePath: item.path,
+          type: item.name.toLowerCase().endsWith('.mp3') ? 'audio' : 'video'
+        }));
+
+        albumsToBatch.push({
+          id: albumId,
+          title: group.albumName,
+          artist: group.parentName,
+          genre: group.rootGenre || selectedGenre,
+          coverUrl: `https://picsum.photos/seed/${encodeURIComponent(albumId)}/600/600`,
+          isDirectAccess: true,
+          tracks: tracks.sort((a, b) => a.title.localeCompare(b.title, undefined, { numeric: true }))
+        });
+      }
+
+      if (albumsToBatch.length > 0) {
+        onAddAlbumsBulk(albumsToBatch);
+        setStatus(`Android OK: ${albumsToBatch.length} Álbuns`);
+      } else {
+        setStatus("Nenhuma música encontrada");
+      }
+      setIsProcessing(false);
+    } catch (err: any) {
+      console.error(err);
+      setStatus(`Erro: ${err.message || "Android"}`);
       setIsProcessing(false);
     }
   };

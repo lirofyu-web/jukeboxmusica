@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Album, ALBUMS, Track, QueuedTrack, VisualizerVideo } from '@/lib/jukebox-data';
 import { getAllAlbums, getAllVisualizers, getUSBHandle, clearUSBHandle } from '@/lib/db';
+import { Capacitor } from '@capacitor/core';
+import { Filesystem } from '@capacitor/filesystem';
 
 const DEFAULT_VISUALIZERS = [
   "https://assets.mixkit.co/videos/preview/mixkit-abstract-motion-background-with-pinks-and-purples-34443-large.mp4",
@@ -196,6 +198,22 @@ export const useJukebox = () => {
   }, [usbHandle]);
 
   const resolveDirectAccessFile = useCallback(async (path: string) => {
+    // Caso Android/Capacitor
+    if (Capacitor.getPlatform() === 'android') {
+      try {
+        const result = await Filesystem.readFile({
+          path: path
+        });
+        
+        const response = await fetch(`data:audio/mpeg;base64,${result.data}`);
+        return await response.blob();
+      } catch (err) {
+        console.error(`Erro ao ler arquivo Android: ${path}`, err);
+        return null;
+      }
+    }
+
+    // Caso Desktop/Browser (File System Access API)
     if (!usbHandle || !isUsbAuthorized) return null;
     try {
       const parts = path.split('/');
