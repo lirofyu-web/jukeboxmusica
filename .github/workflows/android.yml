@@ -17,14 +17,19 @@ jobs:
           distribution: 'zulu'
           java-version: '17'
       - uses: android-actions/setup-android@v3
+      - name: Diagnostic
+        run: ls -R
       - name: Build Android Project
         run: |
           chmod +x android/gradlew
-          chmod +x android/gradlew.bat
           npx cap sync
           cd android
           ./gradlew assembleDebug
       - uses: actions/upload-artifact@v4
+        with:
+          name: app-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+
         with:
           name: app-debug
           path: android/app/build/outputs/apk/debug/app-debug.apk
