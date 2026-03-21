@@ -36,11 +36,22 @@ export function MachineProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!machineId || !firestore || !auth) return;
 
+    let isFirstSnapshot = true;
+
     // Listener para detectar se a máquina foi excluída no painel ADM
     const unsubDoc = onSnapshot(doc(firestore, 'machines', machineId), (snap) => {
       if (!snap.exists()) {
+        // Se não existir no primeiro snapshot, não deslogamos ainda 
+        // (pode ser uma máquina nova sendo criada agora pelo pingMachine)
+        if (isFirstSnapshot) {
+          isFirstSnapshot = false;
+          return;
+        }
+        
         console.log("Máquina excluída pelo administrador. Encerrando sessão...");
         signOut(auth).catch(err => console.error("Erro ao deslogar após exclusão:", err));
+      } else {
+        isFirstSnapshot = false;
       }
     });
 
