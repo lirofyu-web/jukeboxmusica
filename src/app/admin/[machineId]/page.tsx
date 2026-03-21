@@ -125,7 +125,10 @@ export default function MachineAdminPage({ params }: { params: Promise<{ machine
           await new Promise<void>((resolve, reject) => {
             const uploadTask = uploadBytesResumable(storageRef, file);
             uploadTask.on('state_changed', 
-              null, // let the overall progress handle it
+              (snapshot) => {
+                const fileProgress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                // We use the overall progress but could show individual file progress if needed
+              },
               (error) => reject(error),
               () => resolve()
             );
@@ -136,7 +139,7 @@ export default function MachineAdminPage({ params }: { params: Promise<{ machine
           await addDoc(collection(firestore, `machines/${machineId}/music_commands`), {
             title: file.name.replace(/\.[^/.]+$/, ""),
             artist: 'Pasta Upload',
-            url: data.url,
+            url: downloadUrl,
             albumTitle: folderName,
             albumCover: folderCoverUrl,
             command: 'DOWNLOAD_TRACK',
