@@ -29,7 +29,3 @@ jobs:
         with:
           name: app-debug
           path: android/app/build/outputs/apk/debug/app-debug.apk
-
-        with:
-          name: app-debug
-          path: android/app/build/outputs/apk/debug/app-debug.apk
