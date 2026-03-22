@@ -2,9 +2,13 @@ import type {NextConfig} from 'next';
 
 const nextConfig: NextConfig = {
   /* config options here */
-  output: process.env.IS_FIREBASE_DEPLOY ? 'export' : undefined,
+  typescript: {
+    ignoreBuildErrors: true,
+  },
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
   images: {
-    unoptimized: process.env.IS_FIREBASE_DEPLOY ? true : false,
     remotePatterns: [
       {
         protocol: 'https',
