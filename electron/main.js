@@ -2,7 +2,7 @@ const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const serve = require('electron-serve');
-const isDev = process.env.NODE_ENV === 'development';
+const isDev = !app.isPackaged;
 
 // Configurações do Hard Lock
 const KEY_FILENAME = 'jukebox_admin.key';

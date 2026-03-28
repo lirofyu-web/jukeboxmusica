@@ -11,8 +11,9 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
+    "build:static": "node -e \"const fs=require('fs'); if(fs.existsSync('src/app/api')) fs.renameSync('src/app/api', 'src/app/_temp_api')\" && cross-env IS_STATIC_BUILD=true next build && node -e \"const fs=require('fs'); if(fs.existsSync('src/app/_temp_api')) fs.renameSync('src/app/_temp_api', 'src/app/api')\"",
     "electron:dev": "concurrently \"npm run dev\" \"wait-on http://localhost:9002 && cross-env NODE_ENV=development electron .\"",
-    "electron:build": "node scripts/build-electron.js"
+    "electron:build": "npm run build:static && npx electron-builder --linux dir"
   },
   "dependencies": {
     "@capacitor/android": "^8.2.0",

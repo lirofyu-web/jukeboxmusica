@@ -11,18 +11,20 @@ jobs:
         with:
           node-version: 22
       - run: npm install
-      - run: mkdir out && echo "<html><body>Jukebox</body></html>" > out/index.html
+      - name: Build JS Project
+        run: |
+          mv src/app/api src/app/_api_backup || true
+          IS_STATIC_BUILD=true npm run build
+          mv src/app/_api_backup src/app/api || true
       - uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
-          java-version: '21'  # Atualizado para Java 21
+          java-version: '21'
       - uses: android-actions/setup-android@v3
       - name: Build Android Project
         run: |
           npx cap sync
           cd android
-          gradle wrapper
-          chmod +x gradlew
           ./gradlew assembleDebug
       - uses: actions/upload-artifact@v4
         with:
