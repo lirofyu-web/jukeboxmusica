@@ -2,43 +2,28 @@
 
 import React, { useEffect, useState } from 'react';
 import { JukeboxContainer } from '@/components/jukebox/jukebox-container';
-import { LoginView } from '@/components/jukebox/login-view';
-import { useAuth } from '@/firebase/provider';
-import { onAuthStateChanged, User } from 'firebase/auth';
-import { Loader2 } from 'lucide-react';
+import { Loader2, X } from 'lucide-react';
 
 export default function Home() {
-  const auth = useAuth();
-  const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-
-  const [isHardLockPresent, setIsHardLockPresent] = useState<boolean>(false);
   const [checkingHardLock, setCheckingHardLock] = useState(true);
 
   useEffect(() => {
     const checkKey = async () => {
       if (typeof window !== 'undefined' && (window as any).jukeboxAPI) {
         try {
-          const status = await (window as any).jukeboxAPI.checkHardLock();
-          setIsHardLockPresent(status.hardLockPresent);
+          await (window as any).jukeboxAPI.checkHardLock();
+          // Note: status check moved to JukeboxContainer/Provider
         } catch (e) {}
       }
       setCheckingHardLock(false);
+      setLoading(false);
     };
 
     checkKey();
     const interval = setInterval(checkKey, 2000);
     return () => clearInterval(interval);
   }, []);
-
-  useEffect(() => {
-    if (!auth) return;
-    const unsub = onAuthStateChanged(auth, (u) => {
-      setUser(u);
-      setLoading(false);
-    });
-    return () => unsub();
-  }, [auth]);
 
   if (loading || checkingHardLock) {
     return (
@@ -51,12 +36,25 @@ export default function Home() {
 
   // Determina se estamos no App Nativo (Totem) ou no Navegador
   const isElectron = typeof window !== 'undefined' && !!(window as any).jukeboxAPI;
-  const isBrowser = !isElectron;
 
-  // Se estiver no Navegador e não houver operador logado, 
-  // OBRIGATORIAMENTE mostra o Login em vez do Jukebox.
-  if (isBrowser && !user) {
-    return <LoginView />;
+  // Bloqueio de Navegador: A Jukebox só funciona no ambiente nativo (Totem)
+  if (!isElectron) {
+    return (
+      <div className="h-screen w-screen bg-black flex flex-col items-center justify-center p-10 text-center">
+        <div className="max-w-md space-y-6">
+          <div className="w-20 h-20 bg-red-500/10 border border-red-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
+            <X className="w-10 h-10 text-red-500" />
+          </div>
+          <h1 className="text-white text-2xl font-black uppercase tracking-tighter">Ambiente Incompatível</h1>
+          <p className="text-zinc-500 text-sm font-bold leading-relaxed">
+            Esta interface foi desativada para navegadores. Use o aplicativo nativo Jukebox (Linux) para operar este equipamento.
+          </p>
+          <div className="pt-4">
+             <p className="text-[10px] text-zinc-700 font-mono uppercase tracking-widest">Erro: JukeboxAPI_Undefined</p>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   // Se estiver no Totem (Electron):

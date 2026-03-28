@@ -1,7 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<resources>
-    <string name="app_name">JukeboxMontanha</string>
-    <string name="title_activity_main">JukeboxMontanha</string>
-    <string name="package_name">com.jukebox.montanha</string>
-    <string name="custom_url_scheme">com.jukebox.montanha</string>
-</resources>

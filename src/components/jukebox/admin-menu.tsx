@@ -5,7 +5,7 @@ import { Album, Track, GENRES, VisualizerVideo } from '@/lib/jukebox-data';
 import { 
   X, HardDrive, DollarSign, Ban, Settings2, Trash2, RefreshCw, Video, 
   FolderTree, CreditCard, LogOut, Film, Plus, Minus, Star,
-  Keyboard as KeyboardIcon, MousePointer2, Smartphone 
+  Keyboard as KeyboardIcon, MousePointer2 
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,8 +16,6 @@ import {
   deleteVisualizer, saveUSBHandle 
 } from '@/lib/db';
 import { cn } from '@/lib/utils';
-import { Capacitor } from '@capacitor/core';
-import { Filesystem, Directory } from '@capacitor/filesystem';
 import { useFirestore } from '@/firebase/provider';
 import { doc, onSnapshot } from 'firebase/firestore';
 
@@ -453,13 +451,8 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
 
   const handleSyncDirectAccess = async () => {
     try {
-      if (Capacitor.getPlatform() === 'android') {
-        handleAndroidSync();
-        return;
-      }
-
       if (!(window as any).showDirectoryPicker) {
-        alert("Acesso Direto requer Chrome ou Edge. No Android, use o app nativo.");
+        alert("Acesso Direto requer Chrome ou Edge (Electron).");
         return;
       }
 
@@ -565,157 +558,6 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
     } catch (err) {
       console.error(err);
       setStatus("Erro USB");
-      setIsProcessing(false);
-    }
-  };
-
-  const handleAndroidSync = async () => {
-    try {
-      setIsProcessing(true);
-      setStatus("Solicitando Permissão...");
-      
-      const permission = await Filesystem.requestPermissions();
-      if (permission.publicStorage !== 'granted') {
-        setStatus("Permissão Negada");
-        setIsProcessing(false);
-        return;
-      }
-
-      setStatus("Escolha a pasta de músicas (Ex: /storage/emulated/0/Music)");
-      const pathInput = prompt("Digite o caminho da pasta no Android:", "/storage/emulated/0/Music");
-      if (!pathInput) {
-        setIsProcessing(false);
-        return;
-      }
-
-      setStatus("Sincronizando Android...");
-      const albumsToBatch: Album[] = [];
-      const allFiles: { name: string, path: string }[] = [];
-      const visualizerFiles: { name: string, path: string }[] = [];
-
-      async function scanDirectory(path: string) {
-        const result = await Filesystem.readdir({
-          path: path,
-          directory: Directory.ExternalStorage 
-        });
-
-        for (const file of result.files) {
-          const fullPath = `${path}/${file.name}`;
-          if (file.type === 'directory') {
-            await scanDirectory(fullPath);
-          } else {
-            if (fullPath.toLowerCase().includes('backgrounds') && (file.name.toLowerCase().endsWith('.mp4') || file.name.toLowerCase().endsWith('.webm') || file.name.toLowerCase().endsWith('.mkv'))) {
-              visualizerFiles.push({ name: file.name, path: fullPath });
-            } else {
-              allFiles.push({ name: file.name, path: fullPath });
-            }
-          }
-        }
-      }
-
-      await scanDirectory(pathInput.replace('/storage/emulated/0', ''));
-
-      const folderGroups: Record<string, any> = {};
-      
-      for (const item of allFiles) {
-        const name = item.name.toLowerCase();
-        if (name.includes('backgrounds')) continue;
-
-        const folderPath = item.path.includes('/') ? item.path.substring(0, item.path.lastIndexOf('/')) : "";
-        if (!folderGroups[folderPath]) {
-          const parts = item.path.split('/');
-          folderGroups[folderPath] = {
-            files: [],
-            albumName: parts.length > 1 ? parts[parts.length - 2] : "Raiz",
-            parentName: parts.length > 2 ? parts[parts.length - 3] : "Vários",
-            rootGenre: parts[0] || "Geral"
-          };
-        }
-        folderGroups[folderPath].files.push(item);
-      }
-
-      for (const folderPath of Object.keys(folderGroups)) {
-        const group = folderGroups[folderPath];
-        const audioFiles = group.files.filter((f: any) => {
-          const n = f.name.toLowerCase();
-          return n.endsWith('.mp3') || n.endsWith('.mp4') || n.endsWith('.webm') || n.endsWith('.mkv');
-        });
-
-        if (audioFiles.length === 0) continue;
-
-        // Tentar encontrar uma imagem na mesma pasta para o cover
-        const imageFiles = group.files.filter((f: any) => {
-          const n = f.name.toLowerCase();
-          return n.endsWith('.jpg') || n.endsWith('.png') || n.endsWith('.jpeg') || n.endsWith('.webp');
-        });
-
-        let bestCoverBlob: Blob | undefined = undefined;
-        if (imageFiles.length > 0) {
-          try {
-            // Prioriza arquivos que tenham 'capa', 'cover' ou 'front' no nome
-            const preferred = imageFiles.find((f: any) => {
-              const n = f.name.toLowerCase();
-              return n.includes('capa') || n.includes('cover') || n.includes('front');
-            }) || imageFiles[0];
-
-            setStatus(`Lendo capa: ${preferred.name}`);
-            const result = await Filesystem.readFile({
-              path: preferred.path,
-              directory: Directory.ExternalStorage
-            });
-            
-            const response = await fetch(`data:image/jpeg;base64,${result.data}`);
-            bestCoverBlob = await response.blob();
-          } catch (err) {
-            console.error("Erro ao carregar capa no Android:", err);
-          }
-        }
-
-        const albumId = `android-${folderPath.toLowerCase().replace(/[^a-z0-9]/g, '-') || 'root'}`;
-        const tracks: Track[] = audioFiles.map((item: any) => ({
-          id: `track-${albumId}-${item.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
-          title: item.name.replace(/\.[^/.]+$/, ""),
-          duration: "--:--",
-          relativePath: item.path,
-          type: item.name.toLowerCase().endsWith('.mp3') ? 'audio' : 'video'
-        }));
-
-        albumsToBatch.push({
-          id: albumId,
-          title: group.albumName,
-          artist: group.parentName,
-          genre: group.rootGenre || selectedGenre,
-          coverUrl: `https://picsum.photos/seed/${encodeURIComponent(albumId)}/600/600`,
-          coverBlob: bestCoverBlob,
-          isDirectAccess: true,
-          tracks: tracks.sort((a, b) => a.title.localeCompare(b.title, undefined, { numeric: true }))
-        });
-      }
-
-      if (visualizerFiles.length > 0) {
-        for (const f of visualizerFiles) {
-          const viz: VisualizerVideo = {
-            id: `viz-${f.name.toLowerCase().replace(/\s+/g, '-')}`,
-            name: f.name,
-            file: undefined, // File object not directly available from path, will be loaded on demand
-            relativePath: f.path
-          };
-          await saveSingleVisualizer(viz);
-        }
-        loadVisualizers();
-        onVisualizersUpdated();
-      }
-
-      if (albumsToBatch.length > 0) {
-        onAddAlbumsBulk(albumsToBatch);
-        setStatus(`Android OK: ${albumsToBatch.length} Álbuns`);
-      } else {
-        setStatus("Nenhuma música encontrada");
-      }
-      setIsProcessing(false);
-    } catch (err: any) {
-      console.error(err);
-      setStatus(`Erro: ${err.message || "Android"}`);
       setIsProcessing(false);
     }
   };
@@ -1252,7 +1094,7 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
 
               <section className="bg-white/5 backdrop-blur-md p-8 border border-white/5 rounded-sm space-y-6">
                 <h3 className="text-xl font-black uppercase text-primary flex items-center gap-3">
-                  <Smartphone className="h-5 w-5" /> Vínculo com a Nuvem
+                  <RefreshCw className="h-5 w-5" /> Vínculo com a Nuvem
                 </h3>
                 
                 <div className="space-y-4">

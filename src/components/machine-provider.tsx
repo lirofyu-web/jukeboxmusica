@@ -4,7 +4,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useRemoteMusicListener } from '@/hooks/use-remote-music-listener';
 import { useFirestore, useAuth } from '@/firebase/provider';
 import { doc, setDoc, serverTimestamp, onSnapshot, getDoc, query, where, getDocs, limit, collection, deleteDoc } from 'firebase/firestore';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { signOut } from 'firebase/auth';
 
 interface MachineContextType {
   machineId: string | null;
@@ -27,28 +27,15 @@ export function MachineProvider({ children }: { children: React.ReactNode }) {
           const hwId = await (window as any).jukeboxAPI.getMachineId();
           if (hwId) {
             setMachineId(hwId);
-            return; // Usamos o ID do hardware como soberano para clonagem
           }
-        } catch (e) {}
-      }
-
-      // 2. Fallback para Firebase Auth (Modo Web/Antigo)
-      if (!auth) return;
-      const unsub = onAuthStateChanged(auth, (user) => {
-        if (user) {
-          setMachineId(user.uid);
-        } else {
-          setMachineId(null);
+        } catch (e) {
+          console.error("Erro ao obter ID do hardware:", e);
         }
-      });
-      return unsub;
+      }
     };
 
-    const cleanup = initMachineId();
-    return () => {
-      if (typeof cleanup === 'function') (cleanup as any)();
-    };
-  }, [auth]);
+    initMachineId();
+  }, []);
 
   useRemoteMusicListener(machineId);
 

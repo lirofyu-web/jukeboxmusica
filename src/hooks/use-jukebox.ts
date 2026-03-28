@@ -7,8 +7,6 @@ import { useFirestore, useAuth } from '@/firebase/provider';
 import { useMachine } from '@/components/machine-provider';
 import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { Capacitor } from '@capacitor/core';
-import { Filesystem, Directory } from '@capacitor/filesystem';
 
 const DEFAULT_VISUALIZERS = [
   "https://assets.mixkit.co/videos/preview/mixkit-abstract-motion-background-with-pinks-and-purples-34443-large.mp4",
@@ -475,21 +473,6 @@ export const useJukebox = () => {
   }, [usbHandle, isUsbAuthorized, requestUsbPermission]);
 
   const resolveDirectAccessFile = useCallback(async (path: string) => {
-    // Caso Android/Capacitor
-    if (Capacitor.getPlatform() === 'android') {
-      try {
-        const result = await Filesystem.readFile({
-          path: path
-        });
-        
-        const response = await fetch(`data:audio/mpeg;base64,${result.data}`);
-        return await response.blob();
-      } catch (err) {
-        console.error(`Erro ao ler arquivo Android: ${path}`, err);
-        return null;
-      }
-    }
-
     // Caso Desktop/Browser (File System Access API)
     if (!usbHandle || !isUsbAuthorized) return null;
     try {
@@ -518,7 +501,7 @@ export const useJukebox = () => {
 
     let fileToPlay = randomTrack.file;
     if (randomAlbum.isDirectAccess && randomTrack.relativePath) {
-      if (isUsbAuthorized || Capacitor.getPlatform() === 'android') {
+      if (isUsbAuthorized) {
         fileToPlay = (await resolveDirectAccessFile(randomTrack.relativePath)) || undefined;
       }
     }
@@ -566,10 +549,7 @@ export const useJukebox = () => {
       let fileToPlay = track.file;
 
       if (album.isDirectAccess && track.relativePath) {
-        // No Android, a permissão é via sistema, não pelo showDirectoryPicker do navegador
-        const isAndroid = Capacitor.getPlatform() === 'android';
-        
-        if (!isUsbAuthorized && !isAndroid) {
+        if (!isUsbAuthorized) {
           const ok = await requestUsbPermission();
           if (!ok) {
             setMessage("USB NÃO AUTORIZADO");

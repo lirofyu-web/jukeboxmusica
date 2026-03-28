@@ -1,6 +1,8 @@
-function isElectron() {
-  return typeof window !== 'undefined' && window.process && (window.process as any).type === 'renderer' || 
-         (typeof navigator === 'object' && typeof navigator.userAgent === 'string' && navigator.userAgent.indexOf('Electron') >= 0);
+export function isElectron(): boolean {
+  return typeof window !== 'undefined' && 
+         (!!(window as any).jukeboxAPI || 
+          (window.process && (window.process as any).type === 'renderer') ||
+          (typeof navigator === 'object' && navigator.userAgent.indexOf('Electron') >= 0));
 }
 
 export function getProxyUrl(url: string) {
