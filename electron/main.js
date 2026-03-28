@@ -74,23 +74,45 @@ function getUsbStatus() {
   return { hardLockPresent, updateDiskPresent, linkCode };
 }
 
-// Função para obter o ID único da máquina (Hardware)
+// Função para obter o ID único da máquina (Hardware Físico Anti-Clonagem)
 function getHardwareId() {
+  const crypto = require('crypto');
   try {
+    // 1. Prioridade: MAC Address Físico (Único por placa-mãe/placa de rede)
+    const interfaces = require('os').networkInterfaces();
+    let macAddress = null;
+
+    for (const name of Object.keys(interfaces).sort()) {
+      // Ignora interfaces de rede virtuais
+      if (name.includes('lo') || name.includes('docker') || name.includes('veth') || name.includes('vmnet')) continue;
+      
+      const iface = interfaces[name].find(i => !i.internal && i.mac && i.mac !== '00:00:00:00:00:00');
+      if (iface) {
+        macAddress = iface.mac;
+        // Se achou uma interface cabeada (eth ou enp), dá total prioridade e para a busca
+        if (name.startsWith('e')) break; 
+      }
+    }
+
+    if (macAddress) {
+      // Transforma o MAC Address em um código hash embaralhado e seguro
+      return 'hw-' + crypto.createHash('sha256').update(macAddress).digest('hex').substring(0, 16);
+    }
+
+    // 2. Fallbacks de emergência
     if (process.platform === 'linux') {
       if (fs.existsSync('/etc/machine-id')) {
-        return fs.readFileSync('/etc/machine-id', 'utf8').trim();
-      }
-      if (fs.existsSync('/var/lib/dbus/machine-id')) {
-        return fs.readFileSync('/var/lib/dbus/machine-id', 'utf8').trim();
+        const id = fs.readFileSync('/etc/machine-id', 'utf8').trim();
+        return 'lx-' + crypto.createHash('sha256').update(id).digest('hex').substring(0, 12);
       }
     } else if (process.platform === 'win32') {
-      // No Windows, poderíamos usar o registro, mas para simplicidade e 
-      // para o Pedro (que usa Linux nas máquinas), o /etc/machine-id é o foco.
-      // Fallback para Windows:
-      return require('crypto').createHash('sha256').update(process.env.COMPUTERNAME || 'win-machine').digest('hex');
+      return 'wn-' + crypto.createHash('sha256').update(process.env.COMPUTERNAME || 'win-machine').digest('hex').substring(0, 12);
     }
-  } catch (e) {}
+  } catch (e) {
+    console.error("Erro ao gerar ID de hardware Anti-Clonagem:", e);
+  }
+  
+  // Última linha de defesa randômica
   return 'machine-' + Math.random().toString(36).substr(2, 9);
 }
 

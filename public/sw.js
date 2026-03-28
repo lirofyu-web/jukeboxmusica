@@ -37,35 +37,36 @@ self.addEventListener('fetch', (event) => {
   if (
     event.request.method !== 'GET' ||
     url.pathname.startsWith('/api/') || 
-    url.hostname.includes('googleapis.com')
+    url.hostname.includes('googleapis.com') ||
+    url.hostname.includes('firebase')
   ) {
     return; // Deixa o navegador/Electron tratar normalmente via rede
   }
 
-  // Estratégia: Cache-First para arquivos estáticos (JS, CSS, Imagens)
-  // Estratégia: Stale-While-Revalidate para o restante (Páginas)
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
+      // Se houver cache, retornamos ele enquanto atualizamos em background (Stale-While-Revalidate)
       const fetchPromise = fetch(event.request).then((networkResponse) => {
-        // Se a resposta for válida, guarda no cache para a próxima vez
         if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
           const cacheCopy = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, cacheCopy);
-          });
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, cacheCopy));
         }
         return networkResponse;
-      }).catch(() => {
-        // Erro de rede (OFFLINE): Se for uma página, tenta retornar o '/' do cache (App Shell)
+      }).catch((err) => {
+        // Erro de rede (OFFLINE)
         if (event.request.mode === 'navigate') {
           return caches.match('/');
         }
-        return cachedResponse;
+        // Se já tivermos o cache, retornamos ele.
+        if (cachedResponse) return cachedResponse;
+        
+        // No pior caso (sem rede e sem cache), lançamos o erro para o navegador 
+        // mas garantimos que retornamos ALGO se o respondWith nos obrigar.
+        throw err;
       });
 
-      // Retorna o cache IMEDIATAMENTE se existir (Velocidade máxima),
-      // enquanto o fetchPromise atualiza o cache "por baixo do pano" para a próxima vez.
       return cachedResponse || fetchPromise;
     })
   );
 });
+

@@ -6,6 +6,7 @@ import { LogOut, ChevronRight, LayoutDashboard, Music } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
+import { LoginView } from '@/components/jukebox/login-view';
 
 export default function AdminLayout({
   children,
@@ -15,11 +16,13 @@ export default function AdminLayout({
   const auth = useAuth();
   const pathname = usePathname();
   const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
 
   useEffect(() => {
     if (!auth) return;
     return auth.onAuthStateChanged((user: any) => {
       setUserEmail(user?.email || null);
+      setAuthLoading(false);
     });
   }, [auth]);
 
@@ -55,6 +58,41 @@ export default function AdminLayout({
     }
   };
 
+  const cssOverrides = `
+    html, body {
+      overflow: auto !important;
+      height: auto !important;
+      min-height: 100vh !important;
+      position: static !important;
+      touch-action: auto !important;
+      overscroll-behavior: auto !important;
+      cursor: auto !important;
+      -webkit-overflow-scrolling: touch !important;
+    }
+    #admin-layout-root,
+    #admin-layout-root * {
+      cursor: auto !important;
+    }
+  `;
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex flex-col items-center justify-center">
+        <style dangerouslySetInnerHTML={{ __html: cssOverrides }} />
+        <p className="text-zinc-500 font-black uppercase tracking-[0.3em] animate-pulse">Carregando...</p>
+      </div>
+    );
+  }
+
+  if (!userEmail) {
+    return (
+      <>
+        <style dangerouslySetInnerHTML={{ __html: cssOverrides }} />
+        <LoginView />
+      </>
+    );
+  }
+
   return (
     <>
       {/*
@@ -63,22 +101,7 @@ export default function AdminLayout({
         This is the ONLY reliable way to override the kiosk scroll-lock
         without touching globals.css (which would break the main jukebox view).
       */}
-      <style dangerouslySetInnerHTML={{ __html: `
-        html, body {
-          overflow: auto !important;
-          height: auto !important;
-          min-height: 100vh !important;
-          position: static !important;
-          touch-action: auto !important;
-          overscroll-behavior: auto !important;
-          cursor: auto !important;
-          -webkit-overflow-scrolling: touch !important;
-        }
-        #admin-layout-root,
-        #admin-layout-root * {
-          cursor: auto !important;
-        }
-      `}} />
+      <style dangerouslySetInnerHTML={{ __html: cssOverrides }} />
 
       <div
         id="admin-layout-root"

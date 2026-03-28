@@ -40,24 +40,30 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ onClose, onSuccess, 
     setLoading(true);
     setError("");
     try {
-      const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
-      const res = await fetch(`${baseUrl}/api/mercado-pago/create-payment/`, {
+      const res = await fetch('https://api.mercadopago.com/v1/payments', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${mpAccessToken}`,
+          'X-Idempotency-Key': crypto.randomUUID(),
+        },
         body: JSON.stringify({
-          amount: selectedAmount.value,
+          transaction_amount: Number(selectedAmount.value),
+          description: `Créditos Jukebox`,
+          payment_method_id: 'pix',
           external_reference: machineId,
-          accessToken: mpAccessToken
+          payer: { email: 'cliente@tecnofox.com.br' }
         })
       });
       const data = await res.json();
       console.log("[JS] PIX Response Data:", data);
-      if (data.qr_code) {
-        setQrCode(data.qr_code);
+      const qrCodeData = data.point_of_interaction?.transaction_data?.qr_code;
+      if (qrCodeData) {
+        setQrCode(qrCodeData);
         setPaymentId(data.id);
         setStep('qr');
       } else {
-        const msg = data.message || data.details || "Erro desconhecido";
+        const msg = data.message || data.error || "Erro desconhecido do Mercado Pago";
         setError(msg);
         alert(`Erro: ${msg}`);
       }
@@ -74,7 +80,9 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ onClose, onSuccess, 
     if (step === 'qr' && paymentId) {
       interval = setInterval(async () => {
         try {
-          const res = await fetch(`/api/mercado-pago/check-status/${paymentId}?accessToken=${mpAccessToken}`);
+          const res = await fetch(`https://api.mercadopago.com/v1/payments/${paymentId}`, {
+            headers: { 'Authorization': `Bearer ${mpAccessToken}` }
+          });
           if (!res.ok) {
             console.warn("Falha ao verificar status do pagamento:", res.status);
             return;

@@ -135,24 +135,43 @@ export default function MachineAdminPage({ searchParams }: { searchParams: Promi
       if (group.image) {
         try {
           const storage = getStorage();
+          console.log(`[Upload] Iniciando upload da imagem: ${group.image.name}`);
           const imgRef = ref(storage, `machines/${machineId}/uploads/${folderName}/cover_${group.image.name}`);
           await uploadBytesResumable(imgRef, group.image);
           folderCoverUrl = await getDownloadURL(imgRef);
-        } catch (e) { console.error("Falha ao subir capa da pasta", e); }
+          console.log(`[Upload] Imagem enviada: ${folderCoverUrl}`);
+        } catch (e) { 
+          console.error("[Upload] Falha ao subir capa da pasta:", e); 
+        }
       }
 
       for (const file of group.audio) {
         setCurrentFileName(`${folderName}/${file.name}`);
         try {
           const storage = getStorage();
+          console.log(`[Upload] Enviando música (${folderName}): ${file.name}`);
           const storageRef = ref(storage, `machines/${machineId}/uploads/${folderName}/${file.name}`);
           
           await new Promise<void>((resolve, reject) => {
             const uploadTask = uploadBytesResumable(storageRef, file);
-            uploadTask.on('state_changed', null, (error) => reject(error), () => resolve());
+            uploadTask.on('state_changed', 
+              (snapshot) => {
+                const p = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                console.log(`[Upload] Progresso de ${file.name}: ${p.toFixed(2)}%`);
+              }, 
+              (error) => {
+                console.error(`[Upload] Erro no Firebase Storage para ${file.name}:`, error);
+                reject(error);
+              }, 
+              () => {
+                console.log(`[Upload] Sucesso: ${file.name}`);
+                resolve();
+              }
+            );
           });
           
           const downloadUrl = await getDownloadURL(storageRef);
+          console.log(`[Upload] URL gerada: ${downloadUrl}`);
           
           await addDoc(collection(firestore, `machines/${machineId}/music_commands`), {
             title: file.name.replace(/\.[^/.]+$/, ""),
@@ -167,7 +186,11 @@ export default function MachineAdminPage({ searchParams }: { searchParams: Promi
           completed++;
           setProgress((completed / totalToUpload) * 100);
         } catch (err: any) {
-          toast({ title: 'Erro', description: `Falha em ${file.name}`, variant: 'destructive' });
+          console.error(`[Upload] Erro geral ao processar ${file.name}:`, err);
+          toast({ title: 'Erro de Envio', description: `Falha na música ${file.name}. Verifique a permissão CORS. Operação cancelada.`, variant: 'destructive' });
+          setUploading(false);
+          setProgress(0);
+          return; // Aborta todo o loop de pastas
         }
       }
     }
@@ -180,14 +203,29 @@ export default function MachineAdminPage({ searchParams }: { searchParams: Promi
       setCurrentFileName(file.name);
       try {
         const storage = getStorage();
+        console.log(`[Upload] Enviando música avulsa: ${file.name}`);
         const storageRef = ref(storage, `machines/${machineId}/uploads/loose_files/${file.name}`);
         
         await new Promise<void>((resolve, reject) => {
           const uploadTask = uploadBytesResumable(storageRef, file);
-          uploadTask.on('state_changed', null, (error) => reject(error), () => resolve());
+          uploadTask.on('state_changed', 
+            (snapshot) => {
+              const p = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+              console.log(`[Upload] Progresso de ${file.name}: ${p.toFixed(2)}%`);
+            }, 
+            (error) => {
+              console.error(`[Upload] Erro no Firebase Storage para ${file.name}:`, error);
+              reject(error);
+            }, 
+            () => {
+              console.log(`[Upload] Sucesso: ${file.name}`);
+              resolve();
+            }
+          );
         });
         
         const downloadUrl = await getDownloadURL(storageRef);
+        console.log(`[Upload] URL gerada: ${downloadUrl}`);
         
         await addDoc(collection(firestore, `machines/${machineId}/music_commands`), {
           title: file.name.replace(/\.[^/.]+$/, ""),
@@ -200,13 +238,18 @@ export default function MachineAdminPage({ searchParams }: { searchParams: Promi
         completed++;
         setProgress((completed / totalToUpload) * 100);
       } catch (err: any) {
-        toast({ title: 'Erro', description: `Falha em ${file.name}`, variant: 'destructive' });
+        console.error(`[Upload] Erro geral ao processar ${file.name}:`, err);
+        toast({ title: 'Erro de Envio', description: `Falha na música ${file.name}. Verifique CORS. Cancelado.`, variant: 'destructive' });
+        setUploading(false);
+        setProgress(0);
+        return; // Aborta todo o loop avulso
       }
     }
     
     setUploading(false);
     setProgress(0);
     setCurrentFileName('');
+    console.log(`[Upload] Processo finalizado. Total: ${completed}`);
     toast({ title: 'Sucesso!', description: `${completed} músicas enviadas.` });
     
     if (fileInputRef.current) fileInputRef.current.value = '';

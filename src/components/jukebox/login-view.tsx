@@ -67,7 +67,7 @@ export const LoginView = () => {
           </div>
 
           <div className="space-y-2">
-            <label className="text-[10px] font-black uppercase tracking-widest text-primary/60 ml-1">Chave de Acesso</label>
+            <label className="text-[10px] font-black uppercase tracking-widest text-primary/60 ml-1">Senha do Administrador</label>
             <div className="relative">
               <Lock className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
               <Input 

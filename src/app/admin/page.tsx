@@ -228,9 +228,6 @@ export default function AdminPage() {
     }
   }, []);
 
-  if (!user && !loading) {
-    return <LoginView />;
-  }
 
   return (
     <div className="space-y-12 animate-in fade-in duration-700">

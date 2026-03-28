@@ -234,31 +234,32 @@ export const useJukebox = () => {
 
   // Polling para detectar Pendrive (Chave Física / Hard Lock)
   useEffect(() => {
-    const KEY_FILENAME = 'jukebox_admin.key';
-    const EXPECTED_SECRET = 'MONTAGNA_JUKEBOX_2026';
-    
     const checkUsbKey = async () => {
-      // 1. Tentar via API Nativa do Electron (Diferenciando Pendrives)
+      // 1. PRIORIDADE: Se houver um operador logado (Painel Admin/Remoto), 
+      // o sistema NUNCA deve bloquear, mesmo se não houver pendrive.
+      if (operator) {
+        if (isSystemLocked) setIsSystemLocked(false);
+        return;
+      }
+
+      // 2. Fluxo Nativo (Electron / Totem Físico)
       if (typeof window !== 'undefined' && (window as any).jukeboxAPI) {
         try {
           const status = await (window as any).jukeboxAPI.checkHardLock();
           
-          // Se tiver a chave Hard Lock OU um operador logado, destrava o sistema
-          if (status.hardLockPresent || operator) {
+          if (status.hardLockPresent) {
             if (isSystemLocked) setIsSystemLocked(false);
           } else {
-            // Em desenvolvimento ou modo web, não bloqueamos se não tiver o API
+            // No Totem, se tirar a chave e não tiver operador logado, BLOQUEIA.
             if (!isSystemLocked) setIsSystemLocked(true);
           }
 
-          // Captura o código de link se presente
           if (status.linkCode) {
             setLinkCode(status.linkCode);
           } else {
             setLinkCode(null);
           }
 
-          // Se tiver o pendrive de músicas, sinaliza atualização
           if (status.updateDiskPresent) {
             if (!isUpdateDiskPresent) setIsUpdateDiskPresent(true);
           } else {
@@ -270,15 +271,15 @@ export const useJukebox = () => {
         }
       }
 
-      // Fallback: Manter bloqueado se nem chave nem operador estiverem presentes
-      if (!isSystemLocked && !operator) setIsSystemLocked(true);
-      if (isUpdateDiskPresent) setIsUpdateDiskPresent(false);
+      // 3. Modo Web (Navegador sem API nativa)
+      if (!isSystemLocked) setIsSystemLocked(true);
     };
 
     const interval = setInterval(checkUsbKey, 2000);
     checkUsbKey();
     return () => clearInterval(interval);
-  }, [usbHandle, isUpdateDiskPresent, isSystemLocked]);
+  }, [operator, isSystemLocked, isUpdateDiskPresent]);
+
 
 
   const pulseCountRef = useRef(0);

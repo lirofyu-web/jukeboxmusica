@@ -49,15 +49,25 @@ export default function Home() {
     );
   }
 
-  // Se o Hard Lock estiver presente, mostramos o Jukebox (o MachineProvider lidará com o link se necessário)
-  // Ou se tiver um usuário logado (Admin Panel ou Modo Web)
-  if (!isHardLockPresent && !user) {
+  // Determina se estamos no App Nativo (Totem) ou no Navegador
+  const isElectron = typeof window !== 'undefined' && !!(window as any).jukeboxAPI;
+  const isBrowser = !isElectron;
+
+  // Se estiver no Navegador e não houver operador logado, 
+  // OBRIGATORIAMENTE mostra o Login em vez do Jukebox.
+  if (isBrowser && !user) {
     return <LoginView />;
   }
 
+  // Se estiver no Totem (Electron):
+  // 1. Se NÃO tiver Hard Lock e NÃO tiver operador, 
+  // o JukeboxContainer será exibido mas ele próprio mostrará a Splash de Bloqueio.
+  // 2. Se TIVER Hard Lock, o JukeboxContainer abre normalmente.
+  
   return (
-    <main>
+    <main className="h-screen w-screen bg-black overflow-hidden">
       <JukeboxContainer />
     </main>
   );
 }
+
