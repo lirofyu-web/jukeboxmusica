@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { Album } from '@/lib/jukebox-data';
-import { cn } from '@/lib/utils';
+import { cn } from '../../lib/utils';
 import Image from 'next/image';
 
 interface AlbumCardProps {
@@ -22,7 +22,6 @@ export const AlbumCard: React.FC<AlbumCardProps> = ({ album, isSelected }) => {
           ? "album-selected border-primary/50 shadow-[0_0_80px_rgba(249,115,22,0.4)]" 
           : "border-white/5 z-10 opacity-30 grayscale hover:opacity-60 hover:grayscale-0 transition-all duration-700"
       )}
-      style={{ contentVisibility: 'auto', containIntrinsicSize: '250px 350px' }}
     >
       <div className="relative flex-1 w-full overflow-hidden">
         <img 

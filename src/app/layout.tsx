@@ -63,7 +63,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className="antialiased bg-background text-white overflow-hidden touch-none" suppressHydrationWarning>
+      <body className="antialiased bg-background text-white selection:bg-primary/30" suppressHydrationWarning>
         <FirebaseClientProvider>
           <MachineProvider>
             <div suppressHydrationWarning className="min-h-screen">

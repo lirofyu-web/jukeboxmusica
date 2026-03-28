@@ -11,6 +11,7 @@ interface PaymentModalProps {
   onSuccess: (amount: number) => void;
   machineId: string;
   mpAccessToken: string;
+  mappings: Record<string, string>;
 }
 
 const AMOUNTS = [
@@ -19,7 +20,7 @@ const AMOUNTS = [
   { label: 'R$ 5,00', value: 5.00, credits: 10 },
   { label: 'R$ 10,00', value: 10.00, credits: 20 },
 ];
-export const PaymentModal: React.FC<PaymentModalProps> = ({ onClose, onSuccess, machineId, mpAccessToken }) => {
+export const PaymentModal: React.FC<PaymentModalProps> = ({ onClose, onSuccess, machineId, mpAccessToken, mappings }) => {
   const [selectedIdx, setSelectedIdx] = useState(2); // Inicia no R$ 5,00
   const selectedAmount = AMOUNTS[selectedIdx];
 
@@ -39,7 +40,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ onClose, onSuccess, 
     setLoading(true);
     setError("");
     try {
-      const res = await fetch('/api/mercado-pago/create-payment', {
+      const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+      const res = await fetch(`${baseUrl}/api/mercado-pago/create-payment/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -49,6 +51,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ onClose, onSuccess, 
         })
       });
       const data = await res.json();
+      console.log("[JS] PIX Response Data:", data);
       if (data.qr_code) {
         setQrCode(data.qr_code);
         setPaymentId(data.id);
@@ -59,8 +62,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ onClose, onSuccess, 
         alert(`Erro: ${msg}`);
       }
     } catch (err: any) {
-      setError(err.message);
-      console.error(err);
+      setError(`Erro de Rede: ${err.message}. Verifique sua conexão.`);
+      console.error("[JS] Fetch Error:", err);
     } finally {
       setLoading(false);
     }
@@ -77,6 +80,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ onClose, onSuccess, 
             return;
           }
           const data = await res.json();
+          console.log("[JS] PIX Status Check:", data.status, data.status_detail);
           if (data.status === 'approved') {
             setStep('success');
             clearInterval(interval);
@@ -102,26 +106,27 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ onClose, onSuccess, 
       const key = e.key.toLowerCase();
 
       if (step === 'select') {
-        if (key === 'arrowright' || key === 'arrowdown') {
+        if (key === mappings.KEY_RIGHT || key === mappings.KEY_DOWN) {
           e.preventDefault();
           setSelectedIdx(prev => (prev < AMOUNTS.length - 1 ? prev + 1 : 0));
-        } else if (key === 'arrowleft' || key === 'arrowup') {
+        } else if (key === mappings.KEY_LEFT || key === mappings.KEY_UP) {
           e.preventDefault();
           setSelectedIdx(prev => (prev > 0 ? prev - 1 : AMOUNTS.length - 1));
-        } else if (key === 'enter') {
+        } else if (key === mappings.KEY_SELECT || key === mappings.KEY_CHOOSE_ALBUM) {
           e.preventDefault();
           handleGeneratePix();
         }
       }
 
-      if (key === 'escape') {
+      if (key === mappings.KEY_BACK || key === 'escape' || key === mappings.KEY_PIX) {
+        e.preventDefault();
         onClose();
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [step, selectedIdx, onClose]);
+  }, [step, selectedIdx, onClose, mappings]);
 
 
   const copyToClipboard = () => {

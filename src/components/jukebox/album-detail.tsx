@@ -5,7 +5,7 @@ import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { Album, Track } from '@/lib/jukebox-data';
 import { ArrowLeft, Music } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { cn } from '@/lib/utils';
+import { cn } from '../../lib/utils';
 import Image from 'next/image';
 
 interface AlbumDetailProps {
@@ -15,9 +15,16 @@ interface AlbumDetailProps {
   currentTrackId?: string;
   showPaymentModal: boolean;
   showAdmin: boolean;
+  playKey?: string;
+  upKey?: string;
+  downKey?: string;
+  backKey?: string;
 }
 
-export const AlbumDetail: React.FC<AlbumDetailProps> = ({ album, onBack, onSelectTrack, currentTrackId, showPaymentModal, showAdmin }) => {
+export const AlbumDetail: React.FC<AlbumDetailProps> = ({ 
+  album, onBack, onSelectTrack, currentTrackId, showPaymentModal, showAdmin,
+  playKey = 'enter', upKey = 'arrowup', downKey = 'arrowdown', backKey = 'backspace'
+}) => {
   const [focusedIndex, setFocusedIndex] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -33,26 +40,22 @@ export const AlbumDetail: React.FC<AlbumDetailProps> = ({ album, onBack, onSelec
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (showPaymentModal || showAdmin) return;
-    switch (e.key) {
-      case 'ArrowUp': 
-        e.preventDefault(); 
-        setFocusedIndex(prev => (prev > 0 ? prev - 1 : prev)); 
-        break;
-      case 'ArrowDown': 
-        e.preventDefault(); 
-        setFocusedIndex(prev => (prev < album.tracks.length - 1 ? prev + 1 : prev)); 
-        break;
-      case 'Enter': 
-        e.preventDefault(); 
-        onSelectTrack(album.tracks[focusedIndex]);
-        break;
-      case 'Escape': 
-      case 'Backspace':
-        e.preventDefault(); 
-        onBack(); 
-        break;
+    const key = e.key.toLowerCase();
+
+    if (key === upKey.toLowerCase()) {
+      e.preventDefault(); 
+      setFocusedIndex(prev => (prev > 0 ? prev - 1 : prev)); 
+    } else if (key === downKey.toLowerCase()) {
+      e.preventDefault(); 
+      setFocusedIndex(prev => (prev < album.tracks.length - 1 ? prev + 1 : prev)); 
+    } else if (key === playKey.toLowerCase()) {
+      e.preventDefault(); 
+      onSelectTrack(album.tracks[focusedIndex]);
+    } else if (key === backKey.toLowerCase() || (backKey === 'backspace' && key === 'escape')) {
+      e.preventDefault(); 
+      onBack(); 
     }
-  }, [focusedIndex, album.tracks, onBack, onSelectTrack, showPaymentModal, showAdmin]);
+  }, [focusedIndex, album.tracks, onBack, onSelectTrack, showPaymentModal, showAdmin, playKey, upKey, downKey, backKey]);
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown);

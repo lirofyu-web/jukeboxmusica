@@ -1,9 +1,9 @@
-
 "use client";
 
 import React from 'react';
 import { QueuedTrack } from '@/lib/jukebox-data';
 import { Music, Video } from 'lucide-react';
+import { cn } from '../../lib/utils';
 
 interface JukeboxFrameProps {
   children: React.ReactNode;
@@ -11,15 +11,16 @@ interface JukeboxFrameProps {
   statusMessage?: string;
   currentTrack?: QueuedTrack | null;
   machineName?: string;
+  isLinked?: boolean;
 }
 
-export const JukeboxFrame: React.FC<JukeboxFrameProps> = ({ children, credits, statusMessage, currentTrack, machineName }) => {
-  const [isOnline, setIsOnline] = React.useState(true);
+export const JukeboxFrame: React.FC<JukeboxFrameProps> = ({ children, credits, statusMessage, currentTrack, machineName, isLinked }) => {
+  const [hasInternet, setHasInternet] = React.useState(true);
 
   React.useEffect(() => {
-    setIsOnline(navigator.onLine);
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
+    setHasInternet(navigator.onLine);
+    const handleOnline = () => setHasInternet(true);
+    const handleOffline = () => setHasInternet(false);
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
     return () => {
@@ -36,14 +37,18 @@ export const JukeboxFrame: React.FC<JukeboxFrameProps> = ({ children, credits, s
         <div className="absolute inset-0 pointer-events-none z-[200] opacity-[0.03] bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] bg-[length:100%_4px,3px_100%]" />
         
         {/* Offline/Online Badge */}
-        <div className={`absolute top-6 right-6 z-[250] flex items-center gap-2 px-3 py-1 rounded-sm border transition-all duration-500 backdrop-blur-md ${
-          isOnline 
-            ? "bg-primary/5 border-primary/20 text-primary opacity-40 grayscale-[0.5] scale-90" 
-            : "bg-red-600 border-red-500 text-white animate-pulse shadow-[0_0_20px_rgba(220,38,38,0.5)]"
-        }`}>
-          <div className={`w-1.5 h-1.5 rounded-full ${isOnline ? "bg-primary" : "bg-white animate-ping"}`} />
-          <span className="text-[9px] font-black uppercase tracking-[0.2em]">
-            {isOnline ? "Online" : "Offline"}
+        <div className={cn(
+          "absolute top-6 right-6 z-[250] flex items-center gap-2 px-3 py-1 rounded-sm border transition-all duration-500 backdrop-blur-md font-black uppercase tracking-[0.2em] text-[9px]",
+          isLinked 
+            ? "bg-green-500/10 border-green-500/20 text-green-500 shadow-[0_0_15px_rgba(34,197,94,0.1)]" 
+            : "bg-red-500/20 border-red-500/40 text-red-500 animate-pulse shadow-[0_0_20px_rgba(239,68,68,0.3)]"
+        )}>
+          <div className={cn(
+            "w-1.5 h-1.5 rounded-full",
+            isLinked ? (hasInternet ? "bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.8)]" : "bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.8)]") : "bg-red-500 animate-ping"
+          )} />
+          <span>
+            {isLinked ? "SISTEMA ONLINE" : "SISTEMA OFFLINE"}
           </span>
         </div>
 

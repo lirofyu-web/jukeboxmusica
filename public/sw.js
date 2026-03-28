@@ -2,9 +2,7 @@ const CACHE_NAME = 'jukebox-offline-v2';
 const APP_SHELL = [
   '/',
   '/manifest.json',
-  '/favicon.ico',
-  '/images/default-album.png',
-  '/images/jukebox-logo.png'
+  '/favicon.ico'
 ];
 
 // 1. Instalação: Guarda o "Coração" do App (Shell)
@@ -34,10 +32,14 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
   
-  // Ignora chamadas de API (Mercado Pago, Firebase Auth/Firestore)
-  // Deixamos a rede cuidar disso ou o SDK do Firebase que já tem offline nativo
-  if (url.pathname.startsWith('/api/') || url.hostname.includes('googleapis.com')) {
-    return;
+  // 1. Ignora chamadas de API (Mercado Pago, Firebase Auth/Firestore)
+  // 2. O Cache API só suporta o método GET. Ignoramos qualquer outro método (POST da API, etc)
+  if (
+    event.request.method !== 'GET' ||
+    url.pathname.startsWith('/api/') || 
+    url.hostname.includes('googleapis.com')
+  ) {
+    return; // Deixa o navegador/Electron tratar normalmente via rede
   }
 
   // Estratégia: Cache-First para arquivos estáticos (JS, CSS, Imagens)

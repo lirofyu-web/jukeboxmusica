@@ -8,15 +8,18 @@ import { AlbumDetail } from './album-detail';
 import { JukeboxFrame } from './jukebox-frame';
 import { AdminMenu } from './admin-menu';
 import { PaymentModal } from './payment-modal';
+import { VolumeBar } from './volume-bar';
+import { SplashScreen } from './splash-screen';
 import { ListMusic, Video as VideoIcon, Search, RefreshCw, FolderSync, Smartphone, CreditCard } from 'lucide-react';
-import { cn } from '@/lib/utils';
+
+import { cn } from '../../lib/utils';
 import { useJukebox } from '@/hooks/use-jukebox';
 import { useKeyboardNavigation } from '@/hooks/use-keyboard-navigation';
 import { useAuth } from '@/firebase/provider';
-import { saveAlbumsBulk, deleteAlbumFromDB } from '@/lib/db';
+import { saveAlbumsBulk, deleteAlbumFromDB, getSettings } from '@/lib/db';
 import { Button } from '@/components/ui/button';
 
-const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+const ALPHABET = ["*", ...("ABCDEFGHIJKLMNOPQRSTUVWXYZ".split(""))];
 const ITEMS_PER_PAGE = 8;
 const COLUMNS = 4;
 
@@ -31,7 +34,41 @@ export const JukeboxContainer: React.FC = () => {
   const [isMounted, setIsMounted] = useState(false);
   const [isVideoMode, setIsVideoMode] = useState(false);
   const [volume, setVolume] = useState(1.0);
+  const [showVolumeBar, setShowVolumeBar] = useState(false);
   const [lastActivity, setLastActivity] = useState<number>(0);
+  const volumeTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const alphabetTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Keyboard Mappings
+  const [keyMappings, setKeyMappings] = useState<Record<string, string>>({
+    KEY_MENU: 'm',
+    KEY_CREDIT: 'c',
+    KEY_UP: 'arrowup',
+    KEY_DOWN: 'arrowdown',
+    KEY_LEFT: 'arrowleft',
+    KEY_RIGHT: 'arrowright',
+    KEY_SELECT: 'enter',
+    KEY_CHOOSE_ALBUM: '1',
+    KEY_PLAY_TRACK: '2',
+    KEY_BACK: 'backspace',
+    KEY_VOL_CONTROL: 'v',
+    KEY_VOL_UP: '+',
+    KEY_VOL_DOWN: '-',
+    KEY_PIX: 'p',
+    KEY_ALPHABET: 'a'
+  });
+
+
+  const loadMappings = useCallback(async () => {
+    const saved = await getSettings<Record<string, string>>('keyMappings');
+    if (saved) setKeyMappings(prev => ({ ...prev, ...saved }));
+  }, []);
+
+  useEffect(() => {
+    loadMappings();
+    window.addEventListener('jukebox-reload-settings', loadMappings);
+    return () => window.removeEventListener('jukebox-reload-settings', loadMappings);
+  }, [loadMappings]);
 
   const handleLogout = useCallback(async () => {
     if (auth) {
@@ -53,12 +90,32 @@ export const JukeboxContainer: React.FC = () => {
   // Filtered Albums & Current Selection
   const allFilteredAlbums = React.useMemo(() => {
     let combined = [...jukebox.customAlbums, ...ALBUMS]
-      .filter(album => !jukebox.hiddenGenres.includes(album.genre))
-      .filter(album => !letterFilter || album.title.toUpperCase().startsWith(letterFilter));
+      .filter(album => !jukebox.hiddenGenres.includes(album.genre));
+
+    if (letterFilter === '*') {
+      // Filtro especial para lançamentos
+      combined = combined.filter(album => 
+        album.title.toUpperCase().startsWith('LANÇAMENTO') || 
+        album.genre === 'Novidades' ||
+        album.genre === 'Lançamentos'
+      );
+    } else if (letterFilter) {
+      const byLetter = combined.filter(album => album.title.toUpperCase().startsWith(letterFilter));
+      if (byLetter.length > 0) {
+        combined = byLetter;
+      } else {
+        // Fallback para lançamentos se não encontrar nada com a letra
+        combined = combined.filter(album => 
+          album.title.toUpperCase().startsWith('LANÇAMENTO') || 
+          album.genre === 'Novidades' ||
+          album.genre === 'Lançamentos'
+        );
+      }
+    }
 
     combined.sort((a, b) => {
-      const aIsRelease = a.title.toUpperCase().startsWith('LANÇAMENTO') || a.genre === 'Novidades';
-      const bIsRelease = b.title.toUpperCase().startsWith('LANÇAMENTO') || b.genre === 'Novidades';
+      const aIsRelease = a.title.toUpperCase().startsWith('LANÇAMENTO') || a.genre === 'Novidades' || a.genre === 'Lançamentos';
+      const bIsRelease = b.title.toUpperCase().startsWith('LANÇAMENTO') || b.genre === 'Novidades' || b.genre === 'Lançamentos';
       
       if (aIsRelease && !bIsRelease) return -1;
       if (!aIsRelease && bIsRelease) return 1;
@@ -68,6 +125,11 @@ export const JukeboxContainer: React.FC = () => {
 
     return combined;
   }, [jukebox.customAlbums, jukebox.hiddenGenres, letterFilter]);
+
+  const currentPage = Math.floor(selectedIndex / ITEMS_PER_PAGE);
+  const paginatedAlbums = React.useMemo(() => {
+    return allFilteredAlbums.slice(currentPage * ITEMS_PER_PAGE, (currentPage + 1) * ITEMS_PER_PAGE);
+  }, [allFilteredAlbums, currentPage]);
 
   const selectedAlbum = React.useMemo(() => {
     return allFilteredAlbums.find(a => a.id === selectedAlbumId) || null;
@@ -91,6 +153,21 @@ export const JukeboxContainer: React.FC = () => {
       });
     }
   }, [selectedIndex]);
+
+  // Timer para fechar a barra alfabética por inatividade (10s)
+  useEffect(() => {
+    if (showAlphabetBar) {
+      if (alphabetTimeoutRef.current) clearTimeout(alphabetTimeoutRef.current);
+      alphabetTimeoutRef.current = setTimeout(() => {
+        setShowAlphabetBar(false);
+      }, 10000);
+    } else {
+      if (alphabetTimeoutRef.current) clearTimeout(alphabetTimeoutRef.current);
+    }
+    return () => {
+      if (alphabetTimeoutRef.current) clearTimeout(alphabetTimeoutRef.current);
+    };
+  }, [showAlphabetBar, alphabetIndex]);
 
   useEffect(() => {
     if (videoRef.current) {
@@ -176,20 +253,38 @@ export const JukeboxContainer: React.FC = () => {
     }
   }, [jukebox.currentTrack, jukebox.getVisualizerUrl]);
 
-  // Logic below...
+  // Abertura Automática via Pendrive de Atualização (Músicas)
+  useEffect(() => {
+    if (jukebox.isUpdateDiskPresent && !showAdmin) {
+      setShowAdmin(true);
+    }
+  }, [jukebox.isUpdateDiskPresent, showAdmin]);
 
   // Keyboard Navigation Hook
   useKeyboardNavigation({
     onVolumeChange: (delta) => {
-      setVolume(v => {
-        const next = Math.max(0, Math.min(1, v + delta));
-        jukebox.setMessage(`VOLUME: ${Math.round(next * 100)}%`);
-        setTimeout(() => jukebox.setMessage(""), 1000);
+      setVolume(v => Math.max(0, Math.min(1, v + delta)));
+      
+      // Reinicia o timer de 10s da barra de volume ao mudar o valor
+      if (volumeTimerRef.current) clearTimeout(volumeTimerRef.current);
+      volumeTimerRef.current = setTimeout(() => setShowVolumeBar(false), 10000);
+    },
+    onAdminToggle: () => {
+      setShowAdmin(p => !p);
+      setShowVolumeBar(false);
+    },
+    onAddCredit: () => jukebox.addCredit(),
+    onToggleVolume: () => {
+      setShowVolumeBar(prev => {
+        const next = !prev;
+        if (next) {
+          if (volumeTimerRef.current) clearTimeout(volumeTimerRef.current);
+          volumeTimerRef.current = setTimeout(() => setShowVolumeBar(false), 10000);
+        }
         return next;
       });
     },
-    onAdminToggle: () => setShowAdmin(p => !p),
-    onAddCredit: () => jukebox.addCredit(),
+
     onNavigate: (key) => {
       let nextIndex = selectedIndex;
       if (key === 'ArrowLeft') {
@@ -234,10 +329,30 @@ export const JukeboxContainer: React.FC = () => {
     onPaymentToggle: () => {
       if (!showAdmin) setShowPaymentModal(p => !p);
     },
-    showPaymentModal
+    showPaymentModal,
+    showVolumeBar,
+    mappings: keyMappings
   });
 
+
   if (!isMounted || !jukebox.machineId) return <div className="h-full w-full bg-black" />;
+
+  // Se o sistema estiver bloqueado (Hard Lock USB), mostramos a Splash de Bloqueio
+  // MAS permitimos que o AdminMenu (M) seja aberto sobre ela para configuração
+  if (jukebox.isSystemLocked && !showAdmin) {
+    return (
+      <JukeboxFrame 
+        credits={0} 
+        statusMessage="SISTEMA BLOQUEADO" 
+        currentTrack={null}
+        machineName={jukebox.machineName}
+      >
+        <div className="h-full w-full relative bg-black overflow-hidden" suppressHydrationWarning>
+          <SplashScreen isLocked={true} />
+        </div>
+      </JukeboxFrame>
+    );
+  }
 
   return (
     <JukeboxFrame 
@@ -245,58 +360,33 @@ export const JukeboxContainer: React.FC = () => {
       statusMessage={jukebox.message} 
       currentTrack={jukebox.currentTrack}
       machineName={jukebox.machineName}
+      isLinked={jukebox.isLinked}
     >
       <div className="h-full w-full relative bg-black overflow-hidden" suppressHydrationWarning>
+        <SplashScreen isLocked={jukebox.isSystemLocked} />
         
 
-
-          {/* Banner de Re-autorização USB */}
-        {jukebox.usbHandle && !jukebox.isUsbAuthorized && !showAdmin && (
-          <div className="absolute top-0 inset-x-0 h-16 bg-primary/20 backdrop-blur-md z-[160] flex items-center justify-between px-10 border-b border-primary/30 animate-in slide-in-from-top duration-500">
-            <div className="flex items-center gap-4">
-              <RefreshCw className="h-6 w-6 text-primary animate-spin-slow" />
-              <div>
-                <p className="text-white font-black uppercase text-xs">USB Detectado</p>
-                <p className="text-primary/60 text-[10px] uppercase font-bold tracking-widest">Acesso direto precisa ser reativado</p>
-              </div>
-            </div>
-            <Button 
-              onClick={jukebox.requestUsbPermission}
-              className="bg-primary hover:bg-white text-black font-black uppercase text-xs px-6 py-2 rounded-sm transition-all shadow-[0_0_20px_rgba(249,115,22,0.3)]"
-            >
-              Reativar Acesso
-            </Button>
-          </div>
-        )}
+          {/* Banner de Re-autorização USB - Removido para inicialização transparente conforme pedido */}
+        {/* jukebox.usbHandle && !jukebox.isUsbAuthorized && !showAdmin && ( ... ) */}
         
-        {/* Barra de Alfabeto Overlay */}
+        {/* Barra de Alfabeto Overlay Centrada */}
         {showAlphabetBar && (
-          <div className="absolute top-0 inset-x-0 h-24 glass-morphism z-[150] flex flex-col items-center justify-center animate-in slide-in-from-top duration-300">
-            <p className="text-primary/40 font-black uppercase text-[10px] tracking-[0.5em] mb-3">Busca por Letra</p>
-            <div className="flex gap-3 overflow-hidden px-10">
+          <div className="fixed inset-0 z-[150] bg-black/80 backdrop-blur-md flex items-center justify-center animate-in fade-in zoom-in duration-300">
+            <div className="flex flex-wrap gap-2 justify-center max-w-4xl px-10">
               {ALPHABET.map((letter, i) => (
                 <div 
                   key={letter}
                   className={cn(
-                    "w-12 h-12 flex items-center justify-center font-black text-2xl transition-all rounded-sm",
+                    "w-10 h-10 flex items-center justify-center font-black text-lg transition-all rounded-sm",
                     alphabetIndex === i 
-                      ? "bg-primary text-black scale-125 shadow-2xl" 
-                      : "text-white/20"
+                      ? "bg-primary text-black scale-125 shadow-2xl ring-2 ring-primary/50" 
+                      : "text-white/30 border border-white/5 bg-white/5"
                   )}
                 >
                   {letter}
                 </div>
               ))}
             </div>
-          </div>
-        )}
-
-        {/* Indicador de Filtro Ativo */}
-        {letterFilter && !showAlphabetBar && !selectedAlbum && (
-          <div className="absolute top-6 left-6 z-[100] flex items-center gap-3 bg-primary text-black px-5 py-2 rounded-sm font-black uppercase text-sm animate-in fade-in slide-in-from-left">
-            <Search className="h-4 w-4" />
-            <span>Filtro: {letterFilter}</span>
-            <span className="ml-3 text-[10px] opacity-60">[ESC] para Limpar</span>
           </div>
         )}
 
@@ -314,6 +404,10 @@ export const JukeboxContainer: React.FC = () => {
               currentTrackId={jukebox.currentTrack?.id} 
               showPaymentModal={showPaymentModal}
               showAdmin={showAdmin}
+              playKey={keyMappings.KEY_PLAY_TRACK}
+              upKey={keyMappings.KEY_UP}
+              downKey={keyMappings.KEY_DOWN}
+              backKey={keyMappings.KEY_BACK}
             />
           ) : (
             <div 
@@ -328,12 +422,15 @@ export const JukeboxContainer: React.FC = () => {
                   <p className="text-primary/60 text-2xl font-black uppercase tracking-widest text-center">{letterFilter ? `Nenhuma letra "${letterFilter}"` : "Pressione [M] para configurar"}</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-4 gap-6 pb-32" suppressHydrationWarning>
-                  {allFilteredAlbums.map((album: Album, idx: number) => (
-                    <div key={album.id || idx} id={`album-card-${idx}`} className="transition-all duration-300">
-                      <AlbumCard album={album} isSelected={selectedIndex === idx} />
-                    </div>
-                  ))}
+                <div className="grid grid-cols-4 grid-rows-2 gap-4 h-[calc(100vh-160px)] pb-4 overflow-hidden" suppressHydrationWarning>
+                  {paginatedAlbums.map((album: Album, idxInPage: number) => {
+                    const globalIdx = currentPage * ITEMS_PER_PAGE + idxInPage;
+                    return (
+                      <div key={album.id || globalIdx} id={`album-card-${globalIdx}`} className="transition-all duration-300">
+                        <AlbumCard album={album} isSelected={selectedIndex === globalIdx} />
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -388,12 +485,20 @@ export const JukeboxContainer: React.FC = () => {
           }}
           albums={jukebox.customAlbums}
           pricePerSong={jukebox.pricePerSong}
-          setPricePerSong={jukebox.setPricePerSong}
+          onUpdatePrice={jukebox.updatePrice}
           revenueCash={jukebox.revenueCash}
           revenuePix={jukebox.revenuePix}
+          partialRevenueCash={jukebox.partialRevenueCash}
+          partialRevenuePix={jukebox.partialRevenuePix}
+          lastResetDate={jukebox.lastResetDate}
+          onResetPartial={jukebox.resetPartialRevenue}
+          randomPlayEnabled={jukebox.randomPlayEnabled}
+          randomPlayInterval={jukebox.randomPlayInterval}
+          onUpdateRandomPlay={jukebox.updateRandomPlay}
+          bonusConfig={jukebox.bonusConfig}
+          onUpdateBonusConfig={jukebox.updateBonusConfig}
           hiddenGenres={jukebox.hiddenGenres}
-
-          setHiddenGenres={jukebox.setHiddenGenres}
+          onUpdateHiddenGenres={jukebox.updateHiddenGenres}
           visualizerCount={jukebox.customVisualizers.length}
           onVisualizersUpdated={jukebox.loadData}
           mpAccessToken={jukebox.mpAccessToken}
@@ -420,8 +525,12 @@ export const JukeboxContainer: React.FC = () => {
           }}
           machineId={jukebox.machineId}
           mpAccessToken={jukebox.mpAccessToken}
+          mappings={keyMappings}
         />
       )}
+
+      <VolumeBar volume={volume} isVisible={showVolumeBar} />
     </JukeboxFrame>
   );
 };
+

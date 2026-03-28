@@ -1,7 +1,18 @@
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  html, body {
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+  }
+
+  html::-webkit-scrollbar, 
+  body::-webkit-scrollbar {
+    display: none !important;
+  }
+}
 
 @layer base {
   :root {
@@ -41,15 +52,13 @@
     outline: none !important;
   }
   body {
-    @apply bg-background text-foreground overflow-hidden;
-    cursor: none;
+    @apply bg-background text-foreground;
+    cursor: none; /* Esconde no jukebox principal */
     user-select: none;
     -webkit-user-select: none;
     overscroll-behavior: none;
-    position: fixed;
     width: 100%;
-    height: 100%;
-    touch-action: none;
+    min-height: 100%;
     /* Fontes de sistema para garantir funcionamento offline total sem carregar Google Fonts */
     font-family: 'Space Grotesk', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   }
@@ -115,8 +124,13 @@ canvas, video, img {
   pointer-events: none;
 }
 
-button, [role="button"], input {
+button, [role="button"], input, select, textarea {
   pointer-events: auto;
+  cursor: auto !important; /* Garante que o mouse apareça ao passar sobre botões */
+}
+
+.force-cursor {
+  cursor: auto !important;
 }
 
 /* 🚀 PATCH DE ALTA PERFORMANCE PARA ANDROID TV 🚀 */
@@ -144,4 +158,23 @@ button, [role="button"], input {
 
 .android-tv-mode .vinyl-spin {
   animation-duration: 5s !important; /* Reduz velocidade da animação para economizar fôlego */
+}
+
+/* Force hide all scrollbars for a clean kiosk experience */
+* {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+*::-webkit-scrollbar {
+  display: none !important;
+}
+
+/* Scroll is only disabled on Jukebox Main View */
+.jukebox-main-view {
+  overflow: hidden !important;
+  position: fixed;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
 }

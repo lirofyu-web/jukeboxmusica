@@ -20,7 +20,8 @@ export function useCollection<T>(query: Query | null) {
         setLoading(false);
       },
       async (error) => {
-        // Assume context from query if possible, simplified for now
+        // Log the real Firestore error (index missing, permission denied, etc.)
+        console.error('[useCollection] Firestore query error:', error?.message || error?.code, error);
         const permissionError = new FirestorePermissionError({
           path: 'collection',
           operation: 'list',

@@ -28,7 +28,8 @@ export function useRemoteMusicListener(machineId: string | null) {
               await updateDoc(commandDoc.ref, { status: 'downloading' });
 
               // 2. Fetch the file via the proxy to bypass CORS on the browser
-              const proxyUrl = `/api/proxy-download?url=${encodeURIComponent(data.url)}`;
+              const { getProxyUrl } = await import('@/lib/platform');
+              const proxyUrl = getProxyUrl(data.url);
               const response = await fetch(proxyUrl);
               const contentType = response.headers.get('content-type') || '';
               if (!response.ok) throw new Error('Failed to fetch media file via proxy');
@@ -63,9 +64,12 @@ export function useRemoteMusicListener(machineId: string | null) {
                 const monthNames = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
                 const currentMonthName = monthNames[date.getMonth()];
                 const currentYear = date.getFullYear();
+                
+                const { generateCoverDataUrl } = await import('@/lib/generate-cover');
+                
                 albumId = `remote_lancamentos_${date.getMonth()}_${currentYear}`;
                 albumTitle = `Lançamentos ${currentMonthName} ${currentYear}`;
-                albumCover = `/api/cover?month=${encodeURIComponent(currentMonthName)}&year=${currentYear}`;
+                albumCover = generateCoverDataUrl(currentMonthName, currentYear.toString());
               }
 
               const { getAllAlbums } = await import('@/lib/db');

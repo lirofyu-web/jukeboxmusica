@@ -1,0 +1,54 @@
+=====================================================
+PROCESSO FINAL: CORREÇÃO TELA CHEIA (SEM SENHA)
+=====================================================
+
+Eu corrigi o problema da tela cheia! Agora o Jukebox vai abrir 
+ocupando todo o espaço do monitor automaticamente.
+
+---
+PASSO 1: RE-COPIAR OS ARQUIVOS (IMPORTANTE)
+-----------------------------------------------------
+Como eu gerei um novo programa, você precisa apagar o que está 
+no seu Pen Drive e copiar as coisas novas de novo:
+
+No seu Windows, copie estas duas pastas para o Pen Drive:
+1. Pasta "linux-unpacked" (está dentro de "release").
+2. Pasta "scripts" (na raiz do projeto).
+
+No notebook com Lubuntu:
+1. Apague a pasta "Jukebox" antiga se ela existir.
+2. Crie uma nova pasta "Jukebox" na sua Home.
+3. Cole as pastas "linux-unpacked" e "scripts" dentro dela.
+
+---
+PASSO 2: DAR PERMISSÃO E TESTAR
+-----------------------------------------------------
+Abra o terminal e cole estes comandos:
+
+cd ~/Jukebox
+chmod +x linux-unpacked/nextn
+chmod +x scripts/kiosk.sh
+
+Para testar o modo TELA CHEIA:
+./linux-unpacked/nextn --kiosk --no-sandbox
+
+---
+PASSO 3: MODO AUTOMÁTICO
+-----------------------------------------------------
+Se o teste acima funcionou em tela cheia, basta reiniciar o 
+notebook. O arquivo que você colocou na pasta 'autostart' 
+antes já vai funcionar com essa nova versão.
+
+Se ainda não colocou, o comando é:
+mkdir -p ~/.config/autostart
+cp scripts/jukebox.desktop ~/.config/autostart/
+
+PRONTO! Agora deve estar 100% profissional e em tela cheia.
+
+---
+DICA DO MOUSE (SE ESTIVER RUIM DE VER):
+Se o cursor do mouse estiver muito pequeno no notebook:
+1. Vá no Menu do Lubuntu > Preferences > LXQt settings.
+2. Escolha "Keyboard and Mouse" > aba "Mouse".
+3. Em "Cursor size", aumente para 32 ou 48.
+4. Clique em Apply.

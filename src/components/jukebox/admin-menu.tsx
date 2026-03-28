@@ -1,12 +1,20 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Album, Track, GENRES } from '@/lib/jukebox-data';
-import { X, HardDrive, DollarSign, Ban, Settings2, Trash2, RefreshCw, Video, FolderTree, CreditCard, LogOut } from 'lucide-react';
+import { Album, Track, GENRES, VisualizerVideo } from '@/lib/jukebox-data';
+import { 
+  X, HardDrive, DollarSign, Ban, Settings2, Trash2, RefreshCw, Video, 
+  FolderTree, CreditCard, LogOut, Film, Plus, Minus, Star,
+  Keyboard as KeyboardIcon, MousePointer2, Smartphone 
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { saveVisualizers, clearVisualizers, saveUSBHandle } from '@/lib/db';
+import { 
+  saveAlbum, saveAlbumsBulk, getAllAlbums, deleteAlbumFromDB, saveSettings, 
+  getSettings, clearVisualizers, getAllVisualizers, saveSingleVisualizer, 
+  deleteVisualizer, saveUSBHandle 
+} from '@/lib/db';
 import { cn } from '@/lib/utils';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory } from '@capacitor/filesystem';
@@ -20,12 +28,20 @@ interface AdminMenuProps {
   onDeleteAlbum: (id: string) => void;
   albums: Album[];
   pricePerSong: number;
-  setPricePerSong: (price: number) => void;
+  onUpdatePrice: (price: number) => void;
   revenueCash: number;
   revenuePix: number;
+  partialRevenueCash: number;
+  partialRevenuePix: number;
+  lastResetDate: string;
+  onResetPartial: () => void;
+  randomPlayEnabled: boolean;
+  randomPlayInterval: number;
+  onUpdateRandomPlay: (enabled: boolean, interval: number) => void;
+  bonusConfig: Record<string, number>;
+  onUpdateBonusConfig: (config: Record<string, number>) => void;
   hiddenGenres: string[];
-
-  setHiddenGenres: (genres: string[]) => void;
+  onUpdateHiddenGenres: (genres: string[]) => void;
   visualizerCount: number;
   onVisualizersUpdated: () => void;
   mpAccessToken: string;
@@ -42,12 +58,20 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
   onDeleteAlbum,
   albums,
   pricePerSong, 
-  setPricePerSong, 
+  onUpdatePrice, 
   revenueCash,
   revenuePix,
+  partialRevenueCash,
+  partialRevenuePix,
+  lastResetDate,
+  onResetPartial,
+  randomPlayEnabled,
+  randomPlayInterval,
+  onUpdateRandomPlay,
+  bonusConfig,
+  onUpdateBonusConfig,
   hiddenGenres,
-
-  setHiddenGenres,
+  onUpdateHiddenGenres,
   visualizerCount,
   onVisualizersUpdated,
   mpAccessToken,
@@ -61,12 +85,100 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
   const [selectedGenre, setSelectedGenre] = useState(GENRES[0]);
   const [focusedId, setFocusedId] = useState<FocusableId>('sync-btn');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
+  const [visualizers, setVisualizers] = useState<VisualizerVideo[]>([]);
+  const [wifiNetworks, setWifiNetworks] = useState<any[]>([]);
+  const [wifiPassword, setWifiPassword] = useState('');
+  const [wifiStatus, setWifiStatus] = useState<string>("");
+  const [linkCodeInput, setLinkCodeInput] = useState('');
+  const [isLinkedLocally, setIsLinkedLocally] = useState(false);
+
+  // Key Mapping States
+  const [keyMappings, setKeyMappings] = useState<Record<string, string>>({
+    KEY_MENU: 'm',
+    KEY_CREDIT: 'c',
+    KEY_UP: 'arrowup',
+    KEY_DOWN: 'arrowdown',
+    KEY_LEFT: 'arrowleft',
+    KEY_RIGHT: 'arrowright',
+    KEY_SELECT: 'i',
+    KEY_CHOOSE_ALBUM: '1',
+    KEY_PLAY_TRACK: '2',
+    KEY_BACK: 'x',
+    KEY_VOL_CONTROL: 'v',
+    KEY_VOL_UP: '+',
+    KEY_VOL_DOWN: '-',
+    KEY_PIX: 'p'
+  });
+  const [recordingAction, setRecordingAction] = useState<string | null>(null);
+
+  const loadMappings = useCallback(async () => {
+    const saved = await getSettings<Record<string, string>>('keyMappings');
+    if (saved) setKeyMappings(prev => ({ ...prev, ...saved }));
+  }, []);
+
+  const loadVisualizers = useCallback(async () => {
+    const v = await getAllVisualizers();
+    setVisualizers(v);
+  }, []);
+
+  const loadWifi = useCallback(async () => {
+    if (typeof window !== 'undefined' && (window as any).jukeboxAPI) {
+      const nets = await (window as any).jukeboxAPI.listWifi();
+      setWifiNetworks(nets);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadMappings();
+    loadVisualizers();
+    loadWifi();
+    const interval = setInterval(loadWifi, 10000);
+    return () => clearInterval(interval);
+  }, [loadMappings, loadVisualizers, loadWifi]);
+
+  const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsProcessing(true);
+    setStatus("Adicionando vídeos...");
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const viz: VisualizerVideo = {
+        id: `viz-${Date.now()}-${i}`,
+        name: file.name,
+        file: file
+      };
+      await saveSingleVisualizer(viz);
+    }
+    
+    loadVisualizers();
+    onVisualizersUpdated();
+    setStatus(`Adicionados ${files.length} vídeos.`);
+    setIsProcessing(false);
+    if (videoInputRef.current) videoInputRef.current.value = ''; // Clear input
+  };
+
+  const handleDeleteVideo = async (id: string) => {
+    if (confirm("Tem certeza que deseja remover este vídeo?")) {
+      await deleteVisualizer(id);
+      loadVisualizers();
+      onVisualizersUpdated();
+      setStatus("Vídeo removido.");
+    }
+  };
 
   useEffect(() => {
     if (!firestore || !machineId) return;
     const unsub = onSnapshot(doc(firestore, 'machines', machineId), (docSnap) => {
       if (docSnap.exists()) {
-        setMachineName(docSnap.data().name || null);
+        const data = docSnap.data();
+        setMachineName(data.name || null);
+        setIsLinkedLocally(!!data.hardwareId);
+      } else {
+        setIsLinkedLocally(false);
       }
     });
     return () => unsub();
@@ -77,40 +189,113 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
     ...GENRES.map(g => `genre-select-${g}`),
     'sync-btn',
     'sync-direct-btn',
+    'price-minus',
+    'price-plus',
     'logout-btn',
     'clear-lib',
     'clear-viz',
-    ...GENRES.map(g => `genre-toggle-${g}`),
+    'reset-partial-btn',
+    'random-play-toggle',
+    'random-interval-15',
+    'random-interval-30',
+    'random-interval-60',
+    'wifi-password',
+    ...wifiNetworks.map(n => `wifi-connect-${n.ssid}`),
+    'bonus-5',
+    'bonus-10',
+    'bonus-20',
+    'bonus-50',
+    'map-KEY_UP',
+    'map-KEY_DOWN',
+    'map-KEY_LEFT',
+    'map-KEY_RIGHT',
+    'map-KEY_SELECT',
+    'map-KEY_CHOOSE_ALBUM',
+    'map-KEY_PLAY_TRACK',
+    'map-KEY_BACK',
+    'map-KEY_VOL_CONTROL',
+    'map-KEY_VOL_UP',
+    'map-KEY_VOL_DOWN',
+    'map-KEY_CREDIT',
+    'map-KEY_PIX',
+    'map-KEY_MENU',
+    'link-code-input',
+    'link-code-btn',
+    'upload-video-btn',
+    ...visualizers.map(v => `video-del-${v.id}`),
+    ...GENRES.map(g => `toggle-genre-${g}`),
     ...albums.map(a => `album-del-${a.id}`)
   ];
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (recordingAction) {
+      e.preventDefault();
+      const newKey = e.key.toLowerCase();
+      const updated = { ...keyMappings, [recordingAction]: newKey };
+      setKeyMappings(updated);
+      saveSettings('keyMappings', updated);
+      window.dispatchEvent(new CustomEvent('jukebox-reload-settings'));
+      setRecordingAction(null);
+      setStatus(`TECLA SALVA: ${newKey.toUpperCase()}`);
+      return;
+    }
+
+    const key = e.key.toLowerCase();
     const currentIndex = focusableSequence.indexOf(focusedId);
     
-    switch (e.key) {
-      case 'ArrowDown':
+    if (key === keyMappings.KEY_DOWN.toLowerCase()) {
         e.preventDefault();
         setFocusedId(focusableSequence[(currentIndex + 1) % focusableSequence.length]);
-        break;
-      case 'ArrowUp':
+    } else if (key === keyMappings.KEY_UP.toLowerCase()) {
         e.preventDefault();
         setFocusedId(focusableSequence[(currentIndex - 1 + focusableSequence.length) % focusableSequence.length]);
-        break;
-      case 'Enter':
+    } else if (key === keyMappings.KEY_SELECT.toLowerCase() || key === 'enter') {
         if (focusedId === 'sync-btn') {
           fileInputRef.current?.click();
         } else if (focusedId === 'sync-direct-btn') {
           handleSyncDirectAccess();
         } else if (focusedId === 'logout-btn') {
           onLogout();
+        } else if (focusedId === 'upload-video-btn') {
+          videoInputRef.current?.click();
+        } else if (focusedId.startsWith('video-del-')) {
+          const id = focusedId.replace('video-del-', '');
+          handleDeleteVideo(id);
+        } else if (focusedId === 'reset-partial-btn') {
+          if (confirm("Deseja zerar o relógio parcial?")) onResetPartial();
+        } else if (focusedId === 'random-play-toggle') {
+          onUpdateRandomPlay(!randomPlayEnabled, randomPlayInterval);
+        } else if (focusedId.startsWith('random-interval-')) {
+          const interval = parseInt(focusedId.replace('random-interval-', ''));
+          onUpdateRandomPlay(true, interval);
+        } else if (focusedId.startsWith('bonus-')) {
+          const key = focusedId.replace('bonus-', '');
+          // Implementação simples de toggle/ciclo ou incremento
+          // Vamos fazer incremento de 1 em 1 até 50 (ou similar)
+          // Mas como não temos botões +/- separados na sequência de foco para simplicidade de navegação,
+          // Vamos usar as teclas de setas laterais para ajustar quando focado ou cliques sucessivos.
+          // Para o usuário que está usando Teclado/Controle, vamos usar Enter para +1.
+          const current = bonusConfig[key] || 0;
+          const next = (current + 1) % 51;
+          onUpdateBonusConfig({ ...bonusConfig, [key]: next });
+        } else if (focusedId === 'price-minus') {
+          onUpdatePrice(Math.max(0.50, pricePerSong - 0.50));
+        } else if (focusedId === 'price-plus') {
+          onUpdatePrice(pricePerSong + 0.50);
+        } else if (focusedId.startsWith('map-')) {
+          const action = focusedId.replace('map-', '');
+          setRecordingAction(action);
+          setStatus("PRESSIONE A NOVA TECLA...");
+        } else if (focusedId === 'link-code-btn') {
+          handleManualLink();
+        } else if (focusedId.startsWith('wifi-connect-')) {
+          const ssid = focusedId.replace('wifi-connect-', '');
+          handleConnectWifi(ssid);
         }
-        break;
-      case 'Escape':
-      case 'Backspace':
-        if (!isProcessing) onClose();
-        break;
+    } else if (key === keyMappings.KEY_BACK.toLowerCase() || (keyMappings.KEY_BACK === 'backspace' && key === 'escape')) {
+        if (!isProcessing && !recordingAction) onClose();
     }
-  }, [focusedId, focusableSequence, isProcessing, onClose]);
+  }, [focusedId, focusableSequence, isProcessing, onClose, recordingAction, keyMappings, onLogout]);
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown);
@@ -124,9 +309,9 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
 
   const toggleGenreVisibility = (genre: string) => {
     if (hiddenGenres.includes(genre)) {
-      setHiddenGenres(hiddenGenres.filter(g => g !== genre));
+      onUpdateHiddenGenres(hiddenGenres.filter(g => g !== genre));
     } else {
-      setHiddenGenres([...hiddenGenres, genre]);
+      onUpdateHiddenGenres([...hiddenGenres, genre]);
     }
   };
 
@@ -225,18 +410,43 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
     }
 
     if (visualizerFiles.length > 0) {
-      const visualizers = visualizerFiles.map(f => ({
-        id: `viz-${f.name.toLowerCase().replace(/\s+/g, '-')}`,
-        name: f.name,
-        file: f
-      }));
-      await saveVisualizers(visualizers);
+      for (const f of visualizerFiles) {
+        const viz: VisualizerVideo = {
+          id: `viz-${f.name.toLowerCase().replace(/\s+/g, '-')}`,
+          name: f.name,
+          file: f
+        };
+        await saveSingleVisualizer(viz);
+      }
+      loadVisualizers();
       onVisualizersUpdated();
     }
 
     if (albumsToBatch.length > 0) {
       onAddAlbumsBulk(albumsToBatch);
       setStatus(`OK: ${albumsToBatch.length} Álbuns (${albumsWithCover} com capa)`);
+    }
+    setIsProcessing(false);
+  };
+
+  const handleConnectWifi = async (ssid: string) => {
+    if (!wifiPassword) {
+      setWifiStatus("ERRO: DIGITE A SENHA PRIMEIRO!");
+      setFocusedId('wifi-password');
+      return;
+    }
+    
+    setIsProcessing(true);
+    setWifiStatus(`CONECTANDO A ${ssid}...`);
+    
+    if (typeof window !== 'undefined' && (window as any).jukeboxAPI) {
+      const result = await (window as any).jukeboxAPI.connectWifi(ssid, wifiPassword);
+      if (result.success) {
+        setWifiStatus("SUCESSO: WI-FI CONECTADO!");
+        setWifiPassword("");
+      } else {
+        setWifiStatus(`ERRO: ${result.error || "FALHA NA CONEXÃO"}`);
+      }
     }
     setIsProcessing(false);
   };
@@ -273,6 +483,7 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
       
       const folderGroups: Record<string, any> = {};
       const allImages: any[] = [];
+      const visualizerFiles: File[] = [];
 
       for (const item of allFiles) {
         const { file, path } = item;
@@ -280,7 +491,13 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
         if (name.endsWith('.png') || name.endsWith('.jpg') || name.endsWith('.jpeg') || name.endsWith('.webp')) {
           allImages.push({ file, path });
         }
-        if (path.toLowerCase().includes('backgrounds')) continue;
+        
+        if (path.toLowerCase().includes('backgrounds')) {
+          if (name.endsWith('.mp4') || name.endsWith('.webm') || name.endsWith('.mkv')) {
+            visualizerFiles.push(file);
+          }
+          continue;
+        }
 
         const folderPath = path.includes('/') ? path.substring(0, path.lastIndexOf('/')) : "";
         if (!folderGroups[folderPath]) {
@@ -328,6 +545,19 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
         });
       }
 
+      if (visualizerFiles.length > 0) {
+        for (const f of visualizerFiles) {
+          const viz: VisualizerVideo = {
+            id: `viz-${f.name.toLowerCase().replace(/\s+/g, '-')}`,
+            name: f.name,
+            file: f
+          };
+          await saveSingleVisualizer(viz);
+        }
+        loadVisualizers();
+        onVisualizersUpdated();
+      }
+
       await saveUSBHandle(handle);
       onAddAlbumsBulk(albumsToBatch);
       setStatus(`USB Direto Ativo: ${albumsToBatch.length} Álbuns`);
@@ -361,6 +591,7 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
       setStatus("Sincronizando Android...");
       const albumsToBatch: Album[] = [];
       const allFiles: { name: string, path: string }[] = [];
+      const visualizerFiles: { name: string, path: string }[] = [];
 
       async function scanDirectory(path: string) {
         const result = await Filesystem.readdir({
@@ -373,7 +604,11 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
           if (file.type === 'directory') {
             await scanDirectory(fullPath);
           } else {
-            allFiles.push({ name: file.name, path: fullPath });
+            if (fullPath.toLowerCase().includes('backgrounds') && (file.name.toLowerCase().endsWith('.mp4') || file.name.toLowerCase().endsWith('.webm') || file.name.toLowerCase().endsWith('.mkv'))) {
+              visualizerFiles.push({ name: file.name, path: fullPath });
+            } else {
+              allFiles.push({ name: file.name, path: fullPath });
+            }
           }
         }
       }
@@ -457,6 +692,20 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
         });
       }
 
+      if (visualizerFiles.length > 0) {
+        for (const f of visualizerFiles) {
+          const viz: VisualizerVideo = {
+            id: `viz-${f.name.toLowerCase().replace(/\s+/g, '-')}`,
+            name: f.name,
+            file: undefined, // File object not directly available from path, will be loaded on demand
+            relativePath: f.path
+          };
+          await saveSingleVisualizer(viz);
+        }
+        loadVisualizers();
+        onVisualizersUpdated();
+      }
+
       if (albumsToBatch.length > 0) {
         onAddAlbumsBulk(albumsToBatch);
         setStatus(`Android OK: ${albumsToBatch.length} Álbuns`);
@@ -471,8 +720,39 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
     }
   };
 
+  const handleManualLink = async () => {
+    if (!linkCodeInput || !firestore || !machineId) return;
+    setIsProcessing(true);
+    setStatus("Verificando código...");
+    try {
+      const { collection, query, where, limit, getDocs, setDoc, doc, serverTimestamp, deleteDoc } = await import('firebase/firestore');
+      const q = query(collection(firestore, 'machines'), where('activationCode', '==', linkCodeInput.toUpperCase()), limit(1));
+      const snaps = await getDocs(q);
+      
+      if (!snaps.empty) {
+        const targetDoc = snaps.docs[0];
+        await setDoc(doc(firestore, 'machines', machineId), {
+          ...targetDoc.data(),
+          hardwareId: machineId,
+          status: 'online',
+          lastPing: serverTimestamp(),
+          activationCode: null
+        });
+        await deleteDoc(doc(firestore, 'machines', targetDoc.id));
+        setStatus("VÍNCULO REALIZADO!");
+        setLinkCodeInput("");
+      } else {
+        setStatus("CÓDIGO INVÁLIDO");
+      }
+    } catch (e) {
+      console.error(e);
+      setStatus("ERRO NO VÍNCULO");
+    }
+    setIsProcessing(false);
+  };
+
   return (
-    <div className="absolute inset-0 z-[200] flex items-center justify-center bg-black/90 p-6 animate-in fade-in backdrop-blur-sm duration-500" suppressHydrationWarning>
+    <div className="absolute inset-0 z-[200] flex items-center justify-center bg-black/90 p-6 animate-in fade-in backdrop-blur-sm duration-500 force-cursor" suppressHydrationWarning>
       <div className="glass-morphism border border-white/10 w-full max-w-6xl h-[92vh] p-10 shadow-[0_0_200px_rgba(0,0,0,1)] relative flex flex-col overflow-hidden rounded-sm">
         
         <div className="absolute -top-24 -right-24 w-64 h-64 bg-primary/10 rounded-full blur-[100px] pointer-events-none" />
@@ -500,15 +780,87 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
               {machineName || 'Painel do Operador'}
             </h2>
             <p className="text-primary/40 font-black uppercase text-[10px] tracking-[0.5em]">
-              {machineName ? `Painel Local - ID: ${machineId.slice(0, 8)}` : 'Gerenciamento de Sistema & Configurações'}
             </p>
+          </div>
+          
+          <div className="ml-auto flex items-center gap-4 pr-10">
+            <div className={cn(
+              "px-4 py-2 rounded-full border flex items-center gap-2",
+              isLinkedLocally ? "bg-green-500/10 border-green-500/20 text-green-500" : "bg-orange-500/10 border-orange-500/20 text-orange-500"
+            )}>
+              <div className={cn("w-2 h-2 rounded-full animate-pulse", isLinkedLocally ? "bg-green-500" : "bg-orange-500")} />
+              <span className="text-[10px] font-black uppercase tracking-widest">
+                {isLinkedLocally ? "MÁQUINA VINCULADA" : "AGUARDANDO VÍNCULO"}
+              </span>
+            </div>
           </div>
         </div>
 
         <ScrollArea className="flex-1 -mr-4 pr-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-10 pb-10">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-10 pb-10">
             
             <div className="space-y-8">
+              <section className="bg-white/5 backdrop-blur-md p-8 border border-white/5 rounded-sm space-y-6">
+                <h3 className="text-xl font-black uppercase text-primary flex items-center gap-3">
+                  <Settings2 className="h-5 w-5" /> Configurações de Rede (Wi-Fi)
+                </h3>
+                
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-[9px] font-black uppercase tracking-[0.3em] text-zinc-500">1. Digite a Senha</label>
+                    <Input 
+                      id="wifi-password"
+                      type="password"
+                      placeholder="SENHA DO WI-FI"
+                      value={wifiPassword}
+                      onChange={(e) => setWifiPassword(e.target.value)}
+                      onMouseEnter={() => setFocusedId('wifi-password')}
+                      className={cn(
+                        "bg-black/60 border-white/5 text-white font-mono text-center",
+                        focusedId === 'wifi-password' && "border-primary ring-1 ring-primary"
+                      )}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[9px] font-black uppercase tracking-[0.3em] text-zinc-500">2. Escolha a Rede</label>
+                    <div className="space-y-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
+                      {wifiNetworks.length === 0 ? (
+                        <p className="text-[10px] text-zinc-600 italic py-4 text-center">Buscando redes...</p>
+                      ) : (
+                        wifiNetworks.map((net) => (
+                          <button
+                            key={net.ssid}
+                            id={`wifi-connect-${net.ssid}`}
+                            onMouseEnter={() => setFocusedId(`wifi-connect-${net.ssid}`)}
+                            onClick={() => handleConnectWifi(net.ssid)}
+                            className={cn(
+                              "w-full flex items-center justify-between p-3 rounded-sm bg-black/40 border border-white/5 transition-all text-left",
+                              focusedId === `wifi-connect-${net.ssid}` && "bg-primary text-black border-transparent scale-[1.02]"
+                            )}
+                          >
+                            <span className="text-[10px] font-black uppercase truncate">{net.ssid}</span>
+                            <div className="flex items-center gap-2">
+                              {net.security !== "" && <span className="text-[8px] opacity-40">🔒</span>}
+                              <span className="text-[10px] font-mono">{net.signal}%</span>
+                            </div>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  {wifiStatus && (
+                    <div className={cn(
+                      "p-3 rounded-sm text-center border font-black uppercase text-[10px] animate-in slide-in-from-bottom-2",
+                      wifiStatus.startsWith('ERRO') ? "bg-red-500/10 border-red-500/20 text-red-500" : "bg-green-500/10 border-green-500/20 text-green-500"
+                    )}>
+                      {wifiStatus}
+                    </div>
+                  )}
+                </div>
+              </section>
+
               <section className="bg-white/5 backdrop-blur-md p-8 border border-white/5 rounded-sm space-y-6">
                 <h3 className="text-xl font-black uppercase text-primary flex items-center gap-3">
                   <HardDrive className="h-5 w-5" /> USB Inteligente
@@ -573,43 +925,279 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
               </section>
 
               <section className="bg-white/5 backdrop-blur-md p-8 border border-white/5 rounded-sm space-y-6">
-                <h3 className="text-xl font-black uppercase text-primary flex items-center gap-3">
-                  <DollarSign className="h-5 w-5" /> Finanças
-                </h3>
-                <div className="space-y-5">
-                  <div>
-                    <div className="flex items-center justify-between mb-3">
-                      <label className="text-[9px] font-black uppercase tracking-[0.3em] text-zinc-500">Valor por Música</label>
-                      <span className="text-[8px] font-black uppercase text-primary/40 bg-primary/5 px-2 py-1 border border-primary/10 rounded-sm">Bloqueado (Painel ADM)</span>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xl font-black uppercase text-primary flex items-center gap-3">
+                    <DollarSign className="h-5 w-5" /> Relógio de Receita
+                  </h3>
+                  <Button
+                    id="reset-partial-btn"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => { if(confirm("Deseja zerar o relógio parcial?")) onResetPartial(); }}
+                    onMouseEnter={() => setFocusedId('reset-partial-btn')}
+                    className={cn(
+                      "text-[9px] font-black uppercase border-primary/20",
+                      focusedId === 'reset-partial-btn' && "bg-primary text-black border-transparent"
+                    )}
+                  >
+                    Zerar Parcial
+                  </Button>
+                </div>
+
+                <div className="grid grid-cols-1 gap-6">
+                  {/* Relógio Parcial */}
+                  <div className="bg-primary/10 p-6 border border-primary/20 rounded-sm relative overflow-hidden group">
+                    <div className="absolute top-0 right-0 p-2 opacity-20">
+                      <RefreshCw className="h-10 w-10 text-primary rotate-12" />
                     </div>
-                    <div className="relative group">
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-primary/40 font-black text-lg">R$</span>
-                      <div className="bg-black/60 border border-white/5 text-primary text-3xl font-black font-mono h-16 pl-12 flex items-center justify-center rounded-sm opacity-80">
-                        {pricePerSong.toFixed(2).replace('.', ',')}
-                      </div>
+                    <label className="text-[9px] font-black uppercase tracking-[0.3em] text-primary block mb-1">Relógio Parcial</label>
+                    <p className="text-4xl font-black text-white font-mono tracking-tighter mb-2">
+                      R$ {(partialRevenueCash + partialRevenuePix).toFixed(2).replace('.', ',')}
+                    </p>
+                    <div className="flex items-center gap-4 text-[10px] font-bold uppercase text-zinc-500">
+                      <span>Dinheiro: R$ {partialRevenueCash.toFixed(2)}</span>
+                      <span>PIX: R$ {partialRevenuePix.toFixed(2)}</span>
+                    </div>
+                    {lastResetDate && (
+                      <p className="mt-4 pt-4 border-t border-primary/10 text-[9px] font-black uppercase text-primary/60 italic">
+                        Zerado em: {lastResetDate}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Relógio Total */}
+                  <div className="bg-white/5 p-6 border border-white/10 rounded-sm relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-2 opacity-10">
+                      <DollarSign className="h-10 w-10 text-white rotate-12" />
+                    </div>
+                    <label className="text-[9px] font-black uppercase tracking-[0.3em] text-zinc-500 block mb-1">Relógio Total (Acumulado)</label>
+                    <p className="text-4xl font-black gold-gradient-text font-mono tracking-tighter mb-2">
+                      R$ {(revenueCash + revenuePix).toFixed(2).replace('.', ',')}
+                    </p>
+                    <div className="flex items-center gap-4 text-[10px] font-bold uppercase text-zinc-600">
+                      <span>Dinheiro: R$ {revenueCash.toFixed(2)}</span>
+                      <span>PIX: R$ {revenuePix.toFixed(2)}</span>
                     </div>
                   </div>
-                  <div className="bg-primary/5 p-6 border border-primary/20 rounded-sm overflow-hidden relative space-y-4">
+                </div>
+
+                <div className="pt-6 border-t border-white/5">
+                  <div className="flex items-center justify-between mb-3">
+                    <label className="text-[9px] font-black uppercase tracking-[0.3em] text-zinc-500">Valor Unitário (Música)</label>
+                    <span className="text-[8px] font-black uppercase text-primary/40 italic">Ajuste com +/-</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button 
+                      id="price-minus"
+                      onClick={() => onUpdatePrice(Math.max(0.50, pricePerSong - 0.50))}
+                      onMouseEnter={() => setFocusedId('price-minus')}
+                      className={cn(
+                        "w-12 h-12 bg-black/40 border border-white/5 text-white font-black text-xl hover:bg-primary/20 hover:border-primary transition-all rounded-sm",
+                        focusedId === 'price-minus' && "bg-primary text-black border-transparent scale-105"
+                      )}
+                    >
+                      -
+                    </Button>
+                    <div className="flex-1 bg-black/60 border border-white/5 h-12 flex items-center justify-center rounded-sm">
+                      <span className="text-primary text-2xl font-black font-mono">R$ {pricePerSong.toFixed(2).replace('.', ',')}</span>
+                    </div>
+                    <Button 
+                      id="price-plus"
+                      onClick={() => onUpdatePrice(pricePerSong + 0.50)}
+                      onMouseEnter={() => setFocusedId('price-plus')}
+                      className={cn(
+                        "w-12 h-12 bg-black/40 border border-white/5 text-white font-black text-xl hover:bg-primary/20 hover:border-primary transition-all rounded-sm",
+                        focusedId === 'price-plus' && "bg-primary text-black border-transparent scale-105"
+                      )}
+                    >
+                      +
+                    </Button>
+                  </div>
+                </div>
+              </section>
+
+              <section className="bg-white/5 backdrop-blur-md p-8 border border-white/5 rounded-sm space-y-6">
+                <h3 className="text-xl font-black uppercase text-primary flex items-center gap-3">
+                  <RefreshCw className={cn("h-5 w-5", randomPlayEnabled ? "animate-spin-slow" : "")} /> Chama Clientes
+                </h3>
+                
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between p-4 bg-black/40 border border-white/5 rounded-sm">
                     <div>
-                      <label className="text-[9px] font-black uppercase tracking-[0.3em] text-zinc-500 block mb-1">Arrecadação em Espécie</label>
-                      <p className="text-2xl font-black text-white font-mono tracking-tighter">
-                        R$ {revenueCash.toFixed(2).replace('.', ',')}
-                      </p>
+                      <p className="text-[11px] font-black uppercase text-white">Música Aleatória</p>
+                      <p className="text-[9px] font-bold text-zinc-500 uppercase">Toca uma música a cada intervalo</p>
                     </div>
-                    <div className="pt-4 border-t border-white/5">
-                      <label className="text-[9px] font-black uppercase tracking-[0.3em] text-zinc-500 block mb-1">Arrecadação em PIX</label>
-                      <p className="text-2xl font-black text-primary font-mono tracking-tighter">
-                        R$ {revenuePix.toFixed(2).replace('.', ',')}
-                      </p>
-                    </div>
-                    <div className="pt-4 border-t border-primary/20 bg-primary/10 -mx-6 px-6 pb-2">
-                      <label className="text-[9px] font-black uppercase tracking-[0.3em] text-primary/60 block mb-1">Total Geral</label>
-                      <p className="text-4xl font-black gold-gradient-text font-mono tracking-tighter">
-                        R$ {(revenueCash + revenuePix).toFixed(2).replace('.', ',')}
-                      </p>
+                    <button
+                      id="random-play-toggle"
+                      onClick={() => onUpdateRandomPlay(!randomPlayEnabled, randomPlayInterval)}
+                      onMouseEnter={() => setFocusedId('random-play-toggle')}
+                      className={cn(
+                        "w-14 h-8 rounded-full transition-all relative border",
+                        randomPlayEnabled ? "bg-primary border-primary" : "bg-zinc-800 border-white/10",
+                        focusedId === 'random-play-toggle' && "ring-2 ring-white"
+                      )}
+                    >
+                      <div className={cn(
+                        "absolute top-1 w-5 h-5 rounded-full transition-all bg-white",
+                        randomPlayEnabled ? "left-7" : "left-1"
+                      )} />
+                    </button>
+                  </div>
+
+                  <div className="space-y-3">
+                    <label className="text-[9px] font-black uppercase tracking-[0.3em] text-zinc-500">Intervalo de Chamada</label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {[15, 30, 60].map((min) => (
+                        <button
+                          key={min}
+                          id={`random-interval-${min}`}
+                          onClick={() => onUpdateRandomPlay(true, min)}
+                          onMouseEnter={() => setFocusedId(`random-interval-${min}`)}
+                          className={cn(
+                            "py-3 text-[10px] font-black uppercase border transition-all rounded-sm",
+                            randomPlayEnabled && randomPlayInterval === min
+                              ? "bg-primary text-black border-primary"
+                              : "bg-black/40 text-zinc-500 border-white/5",
+                            focusedId === `random-interval-${min}` && "ring-2 ring-white scale-105"
+                          )}
+                        >
+                          {min} MIN
+                        </button>
+                      ))}
                     </div>
                   </div>
 
+                  <div className="p-4 bg-primary/5 border border-primary/10 rounded-sm">
+                    <p className="text-[9px] text-primary/60 font-black uppercase leading-tight text-center">
+                      A música aleatória só será tocada se a máquina estiver ociosa e não houver pedidos na fila.
+                    </p>
+                  </div>
+                </div>
+              </section>
+
+              <section className="bg-white/5 backdrop-blur-md p-8 border border-white/5 rounded-sm space-y-6">
+                <h3 className="text-xl font-black uppercase text-primary flex items-center gap-3">
+                  <Star className="h-5 w-5" /> Configuração de Bônus
+                </h3>
+                
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 gap-3">
+                    {['5', '10', '20', '50'].map((val) => (
+                      <div 
+                        key={val}
+                        id={`bonus-${val}`}
+                        onMouseEnter={() => setFocusedId(`bonus-${val}`)}
+                        onClick={() => {
+                          const current = bonusConfig[val] || 0;
+                          onUpdateBonusConfig({ ...bonusConfig, [val]: current + 1 });
+                        }}
+                        className={cn(
+                          "flex items-center justify-between p-4 bg-black/40 border border-white/5 rounded-sm transition-all",
+                          focusedId === `bonus-${val}` && "bg-primary/20 border-primary scale-[1.02]"
+                        )}
+                      >
+                        <div>
+                          <p className="text-[10px] font-black uppercase text-zinc-500">Ao pagar R$ {val},00</p>
+                          <p className="text-[11px] font-black uppercase text-white">Ganha bônus de:</p>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <div className="text-right">
+                            <span className="text-2xl font-black text-primary font-mono">+{bonusConfig[val] || 0}</span>
+                            <span className="text-[8px] font-black uppercase text-primary/40 block">Músicas</span>
+                          </div>
+                          <div className="flex flex-col gap-1">
+                            <button 
+                              className="w-6 h-6 bg-white/5 hover:bg-white/10 flex items-center justify-center rounded-sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const current = bonusConfig[val] || 0;
+                                onUpdateBonusConfig({ ...bonusConfig, [val]: current + 1 });
+                              }}
+                            >
+                              <Plus className="h-3 w-3" />
+                            </button>
+                            <button 
+                              className="w-6 h-6 bg-white/5 hover:bg-white/10 flex items-center justify-center rounded-sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const current = bonusConfig[val] || 0;
+                                onUpdateBonusConfig({ ...bonusConfig, [val]: Math.max(0, current - 1) });
+                              }}
+                            >
+                              <Minus className="h-3 w-3" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="p-4 bg-primary/10 border border-primary/20 rounded-sm">
+                    <p className="text-[9px] text-primary/80 font-black uppercase leading-tight">
+                      DICA: O bônus é somado aos créditos normais. <br/>
+                      Ex: Se o preço é R$ 1,00 e o bônus para R$ 5,00 é +2, o cliente receberá 7 músicas no total (5 padrão + 2 bônus).
+                    </p>
+                  </div>
+                </div>
+              </section>
+
+
+              <section className="bg-white/5 backdrop-blur-md p-8 border border-white/5 rounded-sm space-y-6">
+                <h3 className="text-xl font-black uppercase text-primary flex items-center gap-3">
+                  <Film className="h-5 w-5" /> Vídeos de Fundo
+                </h3>
+                
+                <div className="space-y-4">
+                  <input
+                    type="file"
+                    ref={videoInputRef}
+                    onChange={handleVideoUpload}
+                    accept="video/mp4,video/webm"
+                    multiple
+                    className="hidden"
+                  />
+                  
+                  <button
+                    id="upload-video-btn"
+                    onClick={() => videoInputRef.current?.click()}
+                    disabled={isProcessing}
+                    onMouseEnter={() => setFocusedId('upload-video-btn')}
+                    className={cn(
+                      "w-full py-4 border-2 border-dashed border-primary/30 rounded-sm font-black uppercase text-xs flex items-center justify-center gap-2 transition-all hover:bg-primary/10 hover:border-primary",
+                      focusedId === 'upload-video-btn' && "bg-primary text-black border-primary scale-[1.02]"
+                    )}
+                  >
+                    <Plus className="h-4 w-4" />
+                    Adicionar Vídeo de Fundo
+                  </button>
+
+                  <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                    {visualizers.map((v) => (
+                      <div 
+                        key={v.id} 
+                        id={`video-del-${v.id}`}
+                        onMouseEnter={() => setFocusedId(`video-del-${v.id}`)}
+                        className={cn(
+                          "flex items-center justify-between gap-4 p-3 bg-black/40 border border-white/5 rounded-sm group transition-all",
+                          focusedId === `video-del-${v.id}` && "bg-red-500/10 border-red-500/50"
+                        )}
+                      >
+                        <div className="flex items-center gap-3 overflow-hidden">
+                          <Film className="h-3 w-3 text-zinc-500" />
+                          <span className="text-[10px] font-bold text-zinc-400 truncate uppercase">{v.name}</span>
+                        </div>
+                        <button 
+                          onClick={() => handleDeleteVideo(v.id)}
+                          className="text-red-500/50 hover:text-red-500 p-1"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
+                    {visualizers.length === 0 && (
+                      <p className="text-center py-10 text-[10px] text-zinc-800 font-bold uppercase tracking-[0.2em] border border-dashed border-white/5">Nenhum vídeo customizado</p>
+                    )}
+                  </div>
                 </div>
               </section>
 
@@ -661,9 +1249,122 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
                   </div>
                 </div>
               </section>
+
+              <section className="bg-white/5 backdrop-blur-md p-8 border border-white/5 rounded-sm space-y-6">
+                <h3 className="text-xl font-black uppercase text-primary flex items-center gap-3">
+                  <Smartphone className="h-5 w-5" /> Vínculo com a Nuvem
+                </h3>
+                
+                <div className="space-y-4">
+                  {!isLinkedLocally ? (
+                    <>
+                      <div className="space-y-2">
+                        <label className="text-[9px] font-black uppercase tracking-[0.3em] text-zinc-500">Digite o Código do Painel</label>
+                        <div className="flex gap-2">
+                          <Input 
+                            id="link-code-input"
+                            placeholder="EX: JUKE-1234"
+                            value={linkCodeInput}
+                            onChange={(e) => setLinkCodeInput(e.target.value.toUpperCase())}
+                            onMouseEnter={() => setFocusedId('link-code-input')}
+                            className={cn(
+                              "bg-black/60 border-white/5 text-white font-mono text-center flex-1",
+                              focusedId === 'link-code-input' && "border-primary ring-1 ring-primary"
+                            )}
+                          />
+                          <Button 
+                            id="link-code-btn"
+                            onClick={handleManualLink}
+                            onMouseEnter={() => setFocusedId('link-code-btn')}
+                            className={cn(
+                              "bg-primary text-black font-black uppercase text-[10px]",
+                              focusedId === 'link-code-btn' && "scale-105 shadow-[0_0_20px_rgba(249,115,22,0.4)]"
+                            )}
+                          >
+                            Vincular
+                          </Button>
+                        </div>
+                      </div>
+                      <p className="text-[8px] text-zinc-600 font-bold uppercase leading-tight italic">
+                        * O código é gerado no Painel ADM (Web) após criar uma "Máquina Shell".
+                      </p>
+                    </>
+                  ) : (
+                    <div className="flex flex-col items-center gap-4 py-4 border border-dashed border-green-500/20 bg-green-500/5 rounded-sm">
+                       <Star className="h-8 w-8 text-green-500 animate-spin-slow" />
+                       <p className="text-[10px] text-green-500 font-black uppercase tracking-widest">Sincronizado com o Servidor</p>
+                    </div>
+                  )}
+
+                  <div className="pt-4 border-t border-white/5">
+                    <p className="text-[9px] text-zinc-500 font-bold uppercase mb-2">Painel de Controle Remoto:</p>
+                    <div className="bg-black/40 p-4 border border-white/5 rounded-sm flex items-center justify-between">
+                       <span className="text-primary font-mono text-xs">www.jukeboxmusica.com/admin</span>
+                       <CreditCard className="h-4 w-4 text-primary/40" />
+                    </div>
+                  </div>
+                </div>
+              </section>
             </div>
 
+
             <div className="space-y-8">
+              <section className="bg-white/5 backdrop-blur-md p-8 border border-white/5 rounded-sm space-y-6">
+                <h3 className="text-xl font-black uppercase text-primary flex items-center gap-3">
+                  <KeyboardIcon className="h-5 w-5" /> Mapeamento de Teclas
+                </h3>
+                
+                <p className="text-[10px] text-zinc-500 font-bold uppercase leading-tight">
+                  Clique no botão da função e pressione a tecla física correspondente para mapear.
+                </p>
+
+                <div className="grid grid-cols-1 gap-2">
+                  {[
+                    { label: 'Cima', action: 'KEY_UP' },
+                    { label: 'Baixo', action: 'KEY_DOWN' },
+                    { label: 'Esquerda', action: 'KEY_LEFT' },
+                    { label: 'Direita', action: 'KEY_RIGHT' },
+                    { label: 'Confirmar (Menu)', action: 'KEY_SELECT' },
+                    { label: 'Escolher Disco', action: 'KEY_CHOOSE_ALBUM' },
+                    { label: 'Tocar Música', action: 'KEY_PLAY_TRACK' },
+                    { label: 'Voltar / Esc', action: 'KEY_BACK' },
+                    { label: 'Alternar Barra Volume', action: 'KEY_VOL_CONTROL' },
+                    { label: 'Aumentar Volume', action: 'KEY_VOL_UP' },
+                    { label: 'Diminuir Volume', action: 'KEY_VOL_DOWN' },
+                    { label: 'Inserir Crédito', action: 'KEY_CREDIT' },
+                    { label: 'Abrir PIX', action: 'KEY_PIX' },
+                    { label: 'Abrir Menu', action: 'KEY_MENU' },
+                  ].map((item) => (
+                    <div key={item.action} className="flex items-center justify-between gap-4 p-2 bg-black/40 border border-white/5 rounded-sm">
+                      <span className="text-[11px] font-black uppercase text-zinc-400">{item.label}</span>
+                      <Button
+                        id={`map-${item.action}`}
+                        onClick={() => { setRecordingAction(item.action); setStatus("AGUARDANDO TECLA..."); }}
+                        onMouseEnter={() => setFocusedId(`map-${item.action}`)}
+                        className={cn(
+                          "min-w-24 h-10 text-[11px] font-black uppercase transition-all rounded-sm",
+                          recordingAction === item.action 
+                            ? "bg-primary text-black animate-pulse scale-110 shadow-[0_0_20px_rgba(249,115,22,0.5)]" 
+                            : (focusedId === `map-${item.action}` ? "bg-white/10 text-primary border-primary" : "bg-white/5 text-zinc-500")
+                        )}
+                      >
+                        {recordingAction === item.action ? '???' : keyMappings[item.action]?.toUpperCase() || 'N/A'}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="p-4 bg-primary/5 border border-primary/10 rounded-sm">
+                  <div className="flex items-center gap-3 mb-2">
+                    <MousePointer2 className="h-4 w-4 text-primary" />
+                    <p className="text-[10px] text-primary font-black uppercase">Dica do Mouse</p>
+                  </div>
+                  <p className="text-[9px] text-zinc-500 font-bold uppercase leading-tight">
+                    Algumas teclas como Windows ou Alt podem não ser capturadas dependendo do sistema operacional.
+                  </p>
+                </div>
+              </section>
+
               <section className="bg-white/5 backdrop-blur-md p-8 border border-white/5 rounded-sm h-full">
                 <h3 className="text-xl font-black uppercase text-primary flex items-center gap-3 mb-8">
                   <Ban className="h-5 w-5" /> Bloquear Gêneros
@@ -671,19 +1372,18 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
                 <div className="space-y-3">
                   {GENRES.map(genre => {
                     const isHidden = hiddenGenres.includes(genre);
-                    const isFocused = focusedId === `genre-toggle-${genre}`;
                     return (
-                      <button 
-                        key={genre} 
-                        id={`genre-toggle-${genre}`}
-                        onClick={() => { toggleGenreVisibility(genre); setFocusedId(`genre-toggle-${genre}`); }} 
-                        onMouseEnter={() => setFocusedId(`genre-toggle-${genre}`)}
+                      <button
+                        key={genre}
+                        id={`toggle-genre-${genre}`}
+                        onClick={() => { toggleGenreVisibility(genre); setFocusedId(`toggle-genre-${genre}`); }}
+                        onMouseEnter={() => setFocusedId(`toggle-genre-${genre}`)}
                         className={cn(
                           "w-full flex items-center justify-between p-5 rounded-sm border transition-all cursor-pointer",
-                          isHidden 
-                            ? 'bg-red-500/10 border-red-500/30 text-red-500' 
+                          isHidden
+                            ? 'bg-red-500/10 border-red-500/30 text-red-500'
                             : 'bg-black/40 border-white/5 text-zinc-400 hover:bg-white/5',
-                          isFocused && "border-white ring-1 ring-white scale-[1.02]"
+                          focusedId === `toggle-genre-${genre}` && "border-white ring-1 ring-white scale-[1.02]"
                         )}
                       >
                         <span className="font-black uppercase tracking-[0.2em] text-[11px]">{genre}</span>
@@ -697,8 +1397,9 @@ export const AdminMenu: React.FC<AdminMenuProps> = ({
               </section>
             </div>
 
+
             <div className="space-y-8">
-               <section className="bg-white/5 backdrop-blur-md p-8 border border-white/5 rounded-sm">
+              <section className="bg-white/5 backdrop-blur-md p-8 border border-white/5 rounded-sm">
                   <div className="flex items-center justify-between mb-8">
                     <h3 className="text-xl font-black uppercase text-primary">Biblioteca</h3>
                     <div className="flex gap-3">

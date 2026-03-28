@@ -1,6 +1,4 @@
-"use client";
-
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 
 interface KeyboardNavigationProps {
   onVolumeChange: (delta: number) => void;
@@ -18,9 +16,11 @@ interface KeyboardNavigationProps {
   onAlphabetSelect: () => void;
   onEscVideoMode: () => void;
   onPaymentToggle: () => void;
+  onToggleVolume: () => void;
   showPaymentModal: boolean;
+  showVolumeBar: boolean;
+  mappings: Record<string, string>;
 }
-
 
 export const useKeyboardNavigation = ({
   onVolumeChange,
@@ -38,21 +38,51 @@ export const useKeyboardNavigation = ({
   onAlphabetSelect,
   onEscVideoMode,
   onPaymentToggle,
-  showPaymentModal
+  onToggleVolume,
+  showPaymentModal,
+  showVolumeBar,
+  mappings
 }: KeyboardNavigationProps) => {
-
+  const holdTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isHoldingRef = useRef<boolean>(false);
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     const key = e.key.toLowerCase();
     
-    // Volume
-    if (key === '+' || key === '=' || key === '-') {
+    if (e.repeat && [mappings.KEY_LEFT, mappings.KEY_RIGHT].includes(key)) return;
+
+    // Volume toggle
+    if (key === mappings.KEY_VOL_CONTROL) {
       e.preventDefault();
-      onVolumeChange(key === '-' ? -0.05 : 0.05);
+      onToggleVolume();
       return;
     }
 
-    // Modo Vídeo / Descanso
+    // Volume Direto
+    if (key === mappings.KEY_VOL_UP || (mappings.KEY_VOL_UP === '+' && key === '=')) {
+      e.preventDefault();
+      onVolumeChange(0.05);
+      if (!showVolumeBar) onToggleVolume();
+      return;
+    }
+    if (key === mappings.KEY_VOL_DOWN) {
+      e.preventDefault();
+      onVolumeChange(-0.05);
+      if (!showVolumeBar) onToggleVolume();
+      return;
+    }
+
+    if (showVolumeBar) {
+      if ([mappings.KEY_LEFT, mappings.KEY_RIGHT, mappings.KEY_UP, mappings.KEY_DOWN].includes(key)) {
+        e.preventDefault();
+        const delta = (key === mappings.KEY_LEFT || key === mappings.KEY_DOWN) ? -0.05 : 0.05;
+        onVolumeChange(delta);
+      } else if (key === 'escape' || key === 'enter' || key === 'backspace') {
+        onToggleVolume();
+      }
+      return;
+    }
+
     if (isVideoMode) {
       if (['enter', 'escape', 'backspace', 'arrowleft', 'arrowright', 'arrowup', 'arrowdown'].includes(key)) {
         onEscVideoMode();
@@ -60,23 +90,19 @@ export const useKeyboardNavigation = ({
       }
     }
 
-    // Menu Admin
-    if (key === 'm') {
+    if (key === mappings.KEY_MENU) {
       e.preventDefault();
       onAdminToggle();
       return;
     }
 
-    // Modal de Pagamento (PIX)
-    if (key === 'p') {
+    if (key === mappings.KEY_PIX) {
       e.preventDefault();
       onPaymentToggle();
       return;
     }
 
-
-    // Créditos
-    if (key === 'c' || key === '5') {
+    if (key === mappings.KEY_CREDIT) {
       e.preventDefault();
       onAddCredit();
       return;
@@ -84,49 +110,91 @@ export const useKeyboardNavigation = ({
 
     if (showAdmin || showPaymentModal) return;
 
-    // Detalhe do Álbum
     if (selectedAlbumId) {
-      if (key === 'escape' || key === 'backspace') {
+      if (key === mappings.KEY_BACK || (mappings.KEY_BACK === 'backspace' && key === 'escape') || key === mappings.KEY_CHOOSE_ALBUM) {
         e.preventDefault();
         onBack();
       }
       return;
     }
 
-    // Barra de Alfabeto Ativa
     if (showAlphabetBar) {
-      if (['arrowleft', 'arrowright', 'arrowup', 'arrowdown'].includes(key)) {
-        e.preventDefault();
-        onAlphabetNavigate(e.key);
-      } else if (key === 'enter') {
-        e.preventDefault();
-        onAlphabetSelect();
-      } else if (key === 'escape' || key === 'backspace') {
+      if (key === mappings.KEY_CHOOSE_ALBUM || key === '1' || key === 'escape') {
         e.preventDefault();
         onToggleAlphabetBar(false);
+        return;
       }
+      
+      if (key === mappings.KEY_PLAY_TRACK || key === '2') {
+        e.preventDefault();
+        onAlphabetSelect();
+        return;
+      }
+
+      if (key === mappings.KEY_LEFT || key === 'arrowleft') {
+        e.preventDefault();
+        onAlphabetNavigate('ArrowLeft');
+      }
+      if (key === mappings.KEY_RIGHT || key === 'arrowright') {
+        e.preventDefault();
+        onAlphabetNavigate('ArrowRight');
+      }
+      // No return here, allowing other keys to be processed if needed,
+      // but the original logic had a return after the alphabet bar block.
+      // Assuming the intent is to handle these keys and then return.
       return;
     }
 
     // Navegação Normal
-    if (['arrowleft', 'arrowright', 'arrowup', 'arrowdown'].includes(key)) {
+    if ([mappings.KEY_UP, mappings.KEY_DOWN].includes(key)) {
       e.preventDefault();
-      onNavigate(e.key);
-    } else if (key === 'enter') {
+      onNavigate(key === mappings.KEY_UP ? 'ArrowUp' : 'ArrowDown');
+    } else if ([mappings.KEY_LEFT, mappings.KEY_RIGHT].includes(key)) {
+      e.preventDefault();
+      // Start Long Press Timer (10 seconds)
+      if (holdTimerRef.current) clearTimeout(holdTimerRef.current);
+      isHoldingRef.current = true;
+      holdTimerRef.current = setTimeout(() => {
+        onToggleAlphabetBar(true);
+        isHoldingRef.current = false;
+        holdTimerRef.current = null;
+      }, 5000); // 5 seconds per requirements
+    } else if (key === mappings.KEY_CHOOSE_ALBUM || key === mappings.KEY_SELECT || key === 'enter') {
       e.preventDefault();
       onSelect();
-    } else if (key === 'escape' || key === 'backspace') {
+    } else if (key === mappings.KEY_BACK || (mappings.KEY_BACK === 'backspace' && key === 'escape')) {
       onBack();
     }
   }, [
     onVolumeChange, onAdminToggle, onAddCredit, onNavigate, onBack, onSelect,
     isVideoMode, showAdmin, selectedAlbumId, showAlphabetBar, onToggleAlphabetBar,
-    onAlphabetNavigate, onAlphabetSelect, onEscVideoMode, onPaymentToggle, showPaymentModal
+    onAlphabetNavigate, onAlphabetSelect, onEscVideoMode, onPaymentToggle, onToggleVolume,
+    showPaymentModal, showVolumeBar, mappings
   ]);
 
+  const handleKeyUp = useCallback((e: KeyboardEvent) => {
+    const key = e.key.toLowerCase();
+    if ([mappings.KEY_LEFT, mappings.KEY_RIGHT].includes(key)) {
+      if (holdTimerRef.current) {
+        clearTimeout(holdTimerRef.current);
+        holdTimerRef.current = null;
+        if (isHoldingRef.current) {
+          isHoldingRef.current = false;
+          let direction = e.key;
+          if (key === mappings.KEY_LEFT) direction = 'ArrowLeft';
+          if (key === mappings.KEY_RIGHT) direction = 'ArrowRight';
+          onNavigate(direction);
+        }
+      }
+    }
+  }, [mappings, onNavigate]);
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleKeyDown]);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [handleKeyDown, handleKeyUp]);
 };

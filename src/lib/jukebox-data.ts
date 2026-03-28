@@ -11,6 +11,7 @@ export type Track = {
 export type QueuedTrack = Track & {
   albumTitle: string;
   artist: string;
+  isRandomAutoPlay?: boolean;
 };
 
 export type Album = {

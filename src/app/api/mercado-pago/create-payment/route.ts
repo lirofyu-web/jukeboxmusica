@@ -15,7 +15,7 @@ export async function POST(request: Request) {
 
     const client = new MercadoPagoConfig({ 
       accessToken: token,
-      options: { timeout: 10000 }
+      options: { timeout: 30000 }
     });
     
     const payment = new Payment(client);
@@ -35,6 +35,8 @@ export async function POST(request: Request) {
       body,
       requestOptions: { idempotencyKey }
     });
+
+    console.log(`PIX RESPOSTA MP:`, JSON.stringify(response, null, 2));
 
     return NextResponse.json({
       id: response.id,
